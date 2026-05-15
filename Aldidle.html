@@ -53,7 +53,7 @@
 
   .header-right { text-align:right; }
   .header-right h1 { font-family:'Anton',sans-serif; font-size:clamp(1.4rem,5vw,2.1rem); color:var(--white); letter-spacing:1px; line-height:1; }
-  .header-right h1 span { color:#FFCC00; }
+  .header-right h1 span { color:#E2001A; }
   .header-right .date-pill {
     display:inline-flex; align-items:center; gap:5px;
     background:rgba(255,255,255,.12);
@@ -259,7 +259,14 @@
     </div>
     <div class="header-right">
       <h1>RAAD DE <span>PRIJS</span></h1>
-      <div class="date-pill" id="header-date">📅 –</div>
+      <div style="display:flex; gap:8px; margin-top:6px; justify-content:flex-end;">
+        <div class="date-pill" id="header-date">📅 –</div>
+        <select id="lang-select" onchange="changeLang(this.value)" style="height:24px; font-size:0.7rem; border:1px solid rgba(255,255,255,.3); border-radius:4px; background:rgba(0,0,0,.2); color:white; padding:2px 6px; cursor:pointer; font-weight:700;">
+          <option value="nl">NL</option>
+          <option value="fr">FR</option>
+          <option value="de">DE</option>
+        </select>
+      </div>
     </div>
   </div>
   <div class="header-stripe"></div>
@@ -273,12 +280,147 @@
   </div>
 </div>
 
-<footer>Aldidlee is een fan-project &nbsp;·&nbsp; Niet gelieerd aan Aldi België nv</footer>
+<footer>Aldidl is een fan-project &nbsp;·&nbsp; Niet gelieerd aan Aldi NV</footer>
 
 <script>
 const MAX_GUESSES = 6;
 const MARGIN = 3.5 / 100;
 const STORAGE_KEY = 'aldidle_daily';
+const LANG_KEY = 'aldidle_lang';
+
+// ── Translations ──────────────────────────────────────────────────────────────
+const translations = {
+  nl: {
+    'raad-de-prijs': 'RAAD DE PRIJS',
+    'product-van-dag': 'Product van de dag ophalen…',
+    'aldi-rekken': 'Aldi-rekken scannen…',
+    'product-pagina': 'Productpagina ophalen…',
+    'afbeelding-laden': 'Afbeelding laden…',
+    'prijskaartje': 'Prijskaartje controleren…',
+    'bijna-klaar': 'Bijna klaar…',
+    'raad': 'RAAD DE PRIJS',
+    'deel-resultaat': '📤 DEEL JE RESULTAAT',
+    'gekopieerd': '✓ Gekopieerd naar klembord!',
+    'te-laag': 'Te laag',
+    'te-hoog': 'Te hoog',
+    'correct': 'Correct!',
+    'veel-te-laag': '📉 Veel te laag',
+    'veel-te-hoog': '📈 Veel te hoog',
+    'raak': '🎯 Raak!',
+    'gewonnen': '🎉',
+    'gewonnen-title': 'CORRECT!',
+    'geraden-in': 'Geraden in',
+    'pogingen': 'pogingen',
+    'verloren': '😬',
+    'verloren-title': 'HELAAS!',
+    'prijs-was': 'De prijs was',
+    'echte-prijs': 'De echte prijs was',
+    'morgen-kans': 'Morgen weer een nieuwe kans!',
+    'volgend-product': 'Volgend product over',
+    'al-gespeeld': 'AL GESPEELD!',
+    'al-geraden': 'Je hebt het product van vandaag al geraden',
+    'al-gewonnen': ' en gewonnen',
+    'morgen-nieuw': 'Morgen staat er een nieuw product klaar!',
+    'kon-niet-laden': 'Kon geen product laden',
+    'probeer-opnieuw': 'PROBEER OPNIEUW',
+    'prijs-label': 'Prijs:',
+    'voer-geldige-prijs': 'Voer een geldige prijs in.',
+    'aldi-belgie': 'België',
+    'footer': 'Aldidle is een fan-project &nbsp;·&nbsp; Niet gelieerd aan Aldi België nv',
+  },
+  fr: {
+    'raad-de-prijs': 'DEVINEZ LE PRIX',
+    'product-van-dag': 'Récupération du produit du jour…',
+    'aldi-rekken': 'Scan des rayons Aldi…',
+    'product-pagina': 'Chargement de la page produit…',
+    'afbeelding-laden': 'Chargement de l\'image…',
+    'prijskaartje': 'Vérification de l\'étiquette…',
+    'bijna-klaar': 'Presque prêt…',
+    'raad': 'DEVINEZ LE PRIX',
+    'deel-resultaat': '📤 PARTAGER VOTRE RÉSULTAT',
+    'gekopieerd': '✓ Copié dans le presse-papiers!',
+    'te-laag': 'Trop bas',
+    'te-hoog': 'Trop haut',
+    'correct': 'Correct!',
+    'veel-te-laag': '📉 Beaucoup trop bas',
+    'veel-te-hoog': '📈 Beaucoup trop haut',
+    'raak': '🎯 Exactement!',
+    'gewonnen': '🎉',
+    'gewonnen-title': 'CORRECT!',
+    'geraden-in': 'Trouvé en',
+    'pogingen': 'tentatives',
+    'verloren': '😬',
+    'verloren-title': 'DOMMAGE!',
+    'prijs-was': 'Le prix était',
+    'echte-prijs': 'Le vrai prix était',
+    'morgen-kans': 'Nouvelle chance demain!',
+    'volgend-product': 'Prochain produit dans',
+    'al-gespeeld': 'DÉJÀ JOUÉ!',
+    'al-geraden': 'Vous avez déjà deviné le produit du jour',
+    'al-gewonnen': ' et gagné',
+    'morgen-nieuw': 'Un nouveau produit vous attend demain!',
+    'kon-niet-laden': 'Impossible de charger le produit',
+    'probeer-opnieuw': 'RÉESSAYER',
+    'prijs-label': 'Prix:',
+    'voer-geldige-prijs': 'Entrez un prix valide.',
+    'aldi-belgie': 'Belgique',
+    'footer': 'Aldidle est un projet fan &nbsp;·&nbsp; Non affilié à Aldi Belgique sa',
+  },
+  de: {
+    'raad-de-prijs': 'PREIS ERRATEN',
+    'product-van-dag': 'Tagesprodukt laden…',
+    'aldi-rekken': 'Aldi-Regale scannen…',
+    'product-pagina': 'Produktseite laden…',
+    'afbeelding-laden': 'Bild wird geladen…',
+    'prijskaartje': 'Preisschild überprüfen…',
+    'bijna-klaar': 'Fast fertig…',
+    'raad': 'PREIS ERRATEN',
+    'deel-resultaat': '📤 ERGEBNIS TEILEN',
+    'gekopieerd': '✓ In Zwischenablage kopiert!',
+    'te-laag': 'Zu niedrig',
+    'te-hoog': 'Zu hoch',
+    'correct': 'Korrekt!',
+    'veel-te-laag': '📉 Viel zu niedrig',
+    'veel-te-hoog': '📈 Viel zu hoch',
+    'raak': '🎯 Genau!',
+    'gewonnen': '🎉',
+    'gewonnen-title': 'KORREKT!',
+    'geraden-in': 'Erraten in',
+    'pogingen': 'Versuchen',
+    'verloren': '😬',
+    'verloren-title': 'SCHADE!',
+    'prijs-was': 'Der Preis war',
+    'echte-prijs': 'Der echte Preis war',
+    'morgen-kans': 'Morgen eine neue Chance!',
+    'volgend-product': 'Nächstes Produkt in',
+    'al-gespeeld': 'BEREITS GESPIELT!',
+    'al-geraden': 'Sie haben das heutige Produkt bereits erraten',
+    'al-gewonnen': ' und gewonnen',
+    'morgen-nieuw': 'Morgen erwartet Sie ein neues Produkt!',
+    'kon-niet-laden': 'Produkt konnte nicht geladen werden',
+    'probeer-opnieuw': 'ERNEUT VERSUCHEN',
+    'prijs-label': 'Preis:',
+    'voer-geldige-prijs': 'Geben Sie einen gültigen Preis ein.',
+    'aldi-belgie': 'Belgien',
+    'footer': 'Aldidle ist ein Fan-Projekt &nbsp;·&nbsp; Nicht mit Aldi Belgien verbunden',
+};
+
+// ── Language helpers ──────────────────────────────────────────────────────────
+let currentLang = localStorage.getItem(LANG_KEY) || 'nl';
+function t(key) { return translations[currentLang][key] || translations.nl[key] || key; }
+function updateHeaderAndFooter() {
+  document.querySelector('.logo-sub').textContent = t('aldi-belgie');
+  const titleParts = t('raad-de-prijs').split(' ');
+  document.querySelector('.header-right h1').innerHTML = `${titleParts[0]} DE <span>${titleParts[2]}</span>`;
+  document.querySelector('footer').innerHTML = t('footer');
+}
+function changeLang(lang) {
+  currentLang = lang;
+  localStorage.setItem(LANG_KEY, lang);
+  document.getElementById('lang-select').value = lang;
+  updateHeaderAndFooter();
+  startGame();
+}
 
 let product  = null;
 let guesses  = [];
@@ -343,7 +485,7 @@ function saveState(data) {
 
 // ── Fetch product van lokale scraper-server ────────────────────────────────
 async function fetchProduct(dateKey) {
-  const resp = await fetch(`/api/product?date=${dateKey}`);
+  const resp = await fetch(`/api/product?date=${dateKey}&lang=${currentLang}`);
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     throw new Error(err.error || `Server fout ${resp.status}`);
@@ -362,8 +504,7 @@ function buildGameUI(restoredGuesses) {
   const imgContent = hasImg
     ? `<img src="${product.imageUrl}" alt="${product.name}"
             onerror="this.style.display='none';document.getElementById('${safeId}').style.display='flex'">
-       <span id="${safeId}" class="emoji-fb" style="display:none">${product.emoji||'🛒'}</span>
-       <span class="img-source-badge">aldi.be</span>`
+       <span id="${safeId}" class="emoji-fb" style="display:none">${product.emoji||'🛒'}</span>`
     : `<span class="emoji-fb">${product.emoji||'🛒'}</span>`;
 
   app.innerHTML = `
@@ -376,7 +517,7 @@ function buildGameUI(restoredGuesses) {
           <div class="product-name">${product.name}</div>
           <div class="product-desc">${product.description}</div>
           <div class="price-mystery">
-            <span class="price-label">Prijs:</span>
+            <span class="price-label">${t('prijs-label')}</span>
             <div class="price-boxes">
               <div class="price-box"></div>
               <div class="price-sep"></div>
@@ -401,16 +542,16 @@ function buildGameUI(restoredGuesses) {
           <input type="number" id="price-input" placeholder="0.00"
                  step="0.01" min="0" max="9999" autocomplete="off">
         </div>
-        <button class="guess-btn" id="guess-btn" onclick="submitGuess()">RAAD DE PRIJS</button>
+        <button class="guess-btn" id="guess-btn" onclick="submitGuess()">${t('raad')}</button>
         <div id="error-msg" class="error-msg" style="display:none"></div>
       </div>
 
       <div class="feedback-list" id="feedback-list"></div>
 
       <div class="legend">
-        <span><div class="legend-dot" style="background:var(--too-low)"></div>Te laag</span>
-        <span><div class="legend-dot" style="background:var(--too-high)"></div>Te hoog</span>
-        <span><div class="legend-dot" style="background:var(--correct)"></div>Correct!</span>
+        <span><div class="legend-dot" style="background:var(--too-low)"></div>${t('te-laag')}</span>
+        <span><div class="legend-dot" style="background:var(--too-high)"></div>${t('te-hoog')}</span>
+        <span><div class="legend-dot" style="background:var(--correct)"></div>${t('correct')}</span>
       </div>
     </div>
   `;
@@ -445,9 +586,9 @@ function replayGuess(val) {
   const high   = product.price + margin;
 
   let type, icon, hint;
-  if (val >= low && val <= high)    { type='correct';  icon='✓'; hint='🎯 Raak!'; }
-  else if (val < low)               { type='too-low';  icon='↑'; hint=val<product.price*.5?'📉 Veel te laag':'⬆️ Te laag'; }
-  else                              { type='too-high'; icon='↓'; hint=val>product.price*1.5?'📈 Veel te hoog':'⬇️ Te hoog'; }
+  if (val >= low && val <= high)    { type='correct';  icon='✓'; hint=t('raak'); }
+  else if (val < low)               { type='too-low';  icon='↑'; hint=val<product.price*.5?t('veel-te-laag'):t('te-laag'); }
+  else                              { type='too-high'; icon='↓'; hint=val>product.price*1.5?t('veel-te-hoog'):t('te-hoog'); }
 
   const dot = document.getElementById(`dot-${idx}`);
   if (dot) {
@@ -482,7 +623,7 @@ function submitGuess() {
   const input = document.getElementById('price-input');
   const val   = parseFloat(input.value);
 
-  if (isNaN(val) || val <= 0) { showError("Voer een geldige prijs in."); shake(); return; }
+  if (isNaN(val) || val <= 0) { showError(t('voer-geldige-prijs')); shake(); return; }
   hideError();
 
   const margin = product.price * MARGIN;
@@ -490,9 +631,9 @@ function submitGuess() {
   const high   = product.price + margin;
 
   let type, icon, hint;
-  if (val >= low && val <= high)    { type='correct';  icon='✓'; hint='🎯 Raak!'; }
-  else if (val < low)               { type='too-low';  icon='↑'; hint=val<product.price*.5?'📉 Veel te laag':'⬆️ Te laag'; }
-  else                              { type='too-high'; icon='↓'; hint=val>product.price*1.5?'📈 Veel te hoog':'⬇️ Te hoog'; }
+  if (val >= low && val <= high)    { type='correct';  icon='✓'; hint=t('raak'); }
+  else if (val < low)               { type='too-low';  icon='↑'; hint=val<product.price*.5?t('veel-te-laag'):t('te-laag'); }
+  else                              { type='too-high'; icon='↓'; hint=val>product.price*1.5?t('veel-te-hoog'):t('te-hoog'); }
 
   const idx = guesses.length;
   guesses.push(val);
@@ -541,7 +682,7 @@ function buildShareText(won) {
   });
   const remaining = MAX_GUESSES - guesses.length;
   const empties   = Array(remaining).fill('⬜');
-  return `Aldidle #${getDayNumber()} — ${formatDateNL(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ Geraden in ${guesses.length}/${MAX_GUESSES}`:`❌ Niet geraden`}\nhttps://aldidle.be`;
+  return `Aldidle #${getDayNumber()} — ${formatDateNL(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ ${t('geraden-in')} ${guesses.length}/${MAX_GUESSES}`:`❌ ${t('verloren-title')}`}\nhttps://aldidle.be`;
 }
 
 function showResult(won) {
@@ -551,20 +692,20 @@ function showResult(won) {
   const div = document.createElement('div');
   div.id = 'result-screen';
   div.innerHTML = won
-    ? `<div class="result-emoji">🎉</div>
-       <div class="result-title win">CORRECT!</div>
-       <div class="result-price-reveal">De prijs was <span class="real-price">€${product.price.toFixed(2)}</span></div>
-       <p style="color:#6b7280;font-size:.82rem;margin-bottom:1.25rem">Geraden in ${guesses.length} poging${guesses.length>1?'en':''}</p>`
-    : `<div class="result-emoji">😬</div>
-       <div class="result-title lose">HELAAS!</div>
-       <div class="result-price-reveal">De echte prijs was <span class="real-price">€${product.price.toFixed(2)}</span></div>
-       <p style="color:#6b7280;font-size:.82rem;margin-bottom:1.25rem">Morgen weer een nieuwe kans!</p>`;
+    ? `<div class="result-emoji">${t('gewonnen')}</div>
+       <div class="result-title win">${t('gewonnen-title')}</div>
+       <div class="result-price-reveal">${t('prijs-was')} <span class="real-price">€${product.price.toFixed(2)}</span></div>
+       <p style="color:#6b7280;font-size:.82rem;margin-bottom:1.25rem">${t('geraden-in')} ${guesses.length} ${guesses.length>1?t('pogingen'):t('pogingen').slice(0,-1)}</p>`
+    : `<div class="result-emoji">${t('verloren')}</div>
+       <div class="result-title lose">${t('verloren-title')}</div>
+       <div class="result-price-reveal">${t('echte-prijs')} <span class="real-price">€${product.price.toFixed(2)}</span></div>
+       <p style="color:#6b7280;font-size:.82rem;margin-bottom:1.25rem">${t('morgen-kans')}</p>`;
 
   // Share button
   const shareText = buildShareText(won);
   const shareBtn  = document.createElement('button');
   shareBtn.className   = 'share-btn';
-  shareBtn.textContent = '📤 DEEL JE RESULTAAT';
+  shareBtn.textContent = t('deel-resultaat');
   shareBtn.onclick = async () => {
     try {
       if (navigator.share) {
@@ -579,13 +720,13 @@ function showResult(won) {
 
   const copiedMsg = document.createElement('div');
   copiedMsg.className   = 'share-copied';
-  copiedMsg.textContent = '✓ Gekopieerd naar klembord!';
+  copiedMsg.textContent = t('gekopieerd');
 
   // Countdown
   const countdownWrap = document.createElement('div');
   countdownWrap.className = 'countdown-wrap';
   countdownWrap.innerHTML = `
-    <div class="countdown-label">Volgend product over</div>
+    <div class="countdown-label">${t('volgend-product')}</div>
     <div id="countdown">--:--:--</div>
   `;
 
@@ -608,25 +749,25 @@ function showAlreadyPlayed(state) {
       return v < state.product.price ? '🟦' : '🟥';
     });
     const empties = Array(MAX_GUESSES - state.guesses.length).fill('⬜');
-    return `Aldidle #${getDayNumber()} — ${formatDateNL(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ Geraden in ${state.guesses.length}/${MAX_GUESSES}`:`❌ Niet geraden`}\nhttps://aldidle.be`;
+    return `Aldidle #${getDayNumber()} — ${formatDateNL(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ ${t('geraden-in')} ${state.guesses.length}/${MAX_GUESSES}`:`❌ ${t('verloren-title')}`}\nhttps://aldidle.be`;
   })();
 
   app.innerHTML = `
     <div class="card">
       <div class="already-played">
         <div class="big-icon">${won ? '🏆' : '😔'}</div>
-        <h2>${won ? 'AL GESPEELD!' : 'AL GESPEELD!'}</h2>
+        <h2>${t('al-gespeeld')}</h2>
         <p>
-          Je hebt het product van vandaag al geraden${won ? ' en gewonnen' : ''}.<br>
+          ${t('al-geraden')}${won ? t('al-gewonnen') : ''}.<br>
           De prijs van <strong>${state.product.name}</strong> was <strong>€${state.product.price.toFixed(2)}</strong>.<br>
-          Morgen staat er een nieuw product klaar!
+          ${t('morgen-nieuw')}
         </p>
         <div class="countdown-wrap">
-          <div class="countdown-label">Volgend product over</div>
+          <div class="countdown-label">${t('volgend-product')}</div>
           <div id="countdown">--:--:--</div>
         </div>
-        <button class="share-btn" id="share-again-btn">📤 DEEL JE RESULTAAT</button>
-        <div id="share-copied" class="share-copied">✓ Gekopieerd!</div>
+        <button class="share-btn" id="share-again-btn">${t('deel-resultaat')}</button>
+        <div id="share-copied" class="share-copied">${t('gekopieerd')}</div>
       </div>
     </div>
   `;
@@ -672,6 +813,8 @@ function hideError()  { const e=document.getElementById('error-msg'); if(e) e.st
 
 // ── Start ─────────────────────────────────────────────────────────────────
 async function startGame() {
+  document.getElementById('lang-select').value = currentLang;
+  updateHeaderAndFooter();
   todayKey = getTodayKey();
   document.getElementById('header-date').textContent = `📅 ${formatDateNL(todayKey)}`;
 
@@ -697,11 +840,11 @@ async function startGame() {
   document.getElementById('app').innerHTML = `
     <div id="loading-screen" class="card" style="text-align:center;padding:3rem 1rem">
       <div class="spinner"></div>
-      <div class="loading-label">Product van de dag ophalen…</div>
-      <p id="loading-msg">Aldi-rekken scannen…</p>
+      <div class="loading-label">${t('product-van-dag')}</div>
+      <p id="loading-msg">${t('aldi-rekken')}</p>
     </div>`;
 
-  const msgs = ['Aldi-rekken scannen…','Productpagina ophalen…','Afbeelding laden…','Prijskaartje controleren…','Bijna klaar…'];
+  const msgs = [t('aldi-rekken'), t('product-pagina'), t('afbeelding-laden'), t('prijskaartje'), t('bijna-klaar')];
   let mi = 0;
   const ticker = setInterval(() => {
     mi = (mi+1) % msgs.length;
@@ -719,9 +862,9 @@ async function startGame() {
     document.getElementById('app').innerHTML = `
       <div class="card" style="text-align:center;padding:2rem">
         <div style="font-size:2rem;margin-bottom:1rem">⚠️</div>
-        <div style="color:var(--blue);font-weight:700;margin-bottom:.5rem">Kon geen product laden</div>
+        <div style="color:var(--blue);font-weight:700;margin-bottom:.5rem">${t('kon-niet-laden')}</div>
         <div style="color:#6b7280;font-size:.85rem;margin-bottom:1.5rem">${err.message}</div>
-        <button class="play-again-btn" onclick="startGame()">PROBEER OPNIEUW</button>
+        <button class="play-again-btn" onclick="startGame()">${t('probeer-opnieuw')}</button>
       </div>`;
   }
 }

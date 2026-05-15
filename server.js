@@ -8,7 +8,8 @@ const app        = express();
 const PORT       = process.env.PORT || 3000;
 const CACHE_FILE = path.join(__dirname, '.product-cache.json');
 const BASE_URL   = 'https://www.aldi.be';
-const SITEMAP    = `${BASE_URL}/nl/.aldi-nord-sitemap-pages.xml`;
+
+const LANGS = { nl: 'nl', fr: 'fr', de: 'de' };
 
 const HEADERS = {
   'User-Agent':      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -38,22 +39,25 @@ function getTodayKey() {
 }
 
 // ── 1. Sitemap: permanente assortiment (~1200+ producten) ─────────────────────
-async function fetchSitemapUrls() {
-  const resp = await axios.get(SITEMAP, {
+async function fetchSitemapUrls(lang = 'nl') {
+  const l = LANGS[lang] || 'nl';
+  const sitemapUrl = `${BASE_URL}/${l}/.aldi-nord-sitemap-pages.xml`;
+  const resp = await axios.get(sitemapUrl, {
     headers: { ...HEADERS, Accept: 'application/xml,text/xml,*/*' },
     timeout: 20000,
   });
   const urls = [];
   for (const m of resp.data.matchAll(/<loc>(https?:\/\/[^<]+\.article\.html)<\/loc>/g)) {
-    if (m[1].includes('/nl/p/')) urls.push(m[1]);
+    if (m[1].includes(`/${l}/p/`)) urls.push(m[1]);
   }
   return urls;
 }
 
 // ── 2. Weekaanbiedingen: links van homepage + recente aanbiedingenspagina's ───
-async function fetchOfferUrls() {
+async function fetchOfferUrls(lang = 'nl') {
+  const l = LANGS[lang] || 'nl';
   const seen = new Set();
-  const pagesToCheck = [`${BASE_URL}/nl/`];
+  const pagesToCheck = [`${BASE_URL}/${l}/`];
 
   // Voeg de laatste 10 woensdagen toe als kandidaat-URL's
   const now = new Date();
@@ -63,7 +67,7 @@ async function fetchOfferUrls() {
     d.setDate(now.getDate() - daysToLastWed - w * 7);
     const dd = String(d.getDate()).padStart(2, '0');
     const mm = String(d.getMonth() + 1).padStart(2, '0');
-    pagesToCheck.push(`${BASE_URL}/nl/onze-aanbiedingen/aanbiedingen-${dd}-${mm}/`);
+    pagesToCheck.push(`${BASE_URL}/${l}/onze-aanbiedingen/aanbiedingen-${dd}-${mm}/`);
   }
 
   for (const pageUrl of pagesToCheck) {
@@ -81,15 +85,15 @@ async function fetchOfferUrls() {
 }
 
 // ── Gecombineerde pool bouwen ──────────────────────────────────────────────────
-async function fetchProductPool() {
+async function fetchProductPool(lang = 'nl') {
   const [sitemap, offers] = await Promise.allSettled([
-    fetchSitemapUrls(),
-    fetchOfferUrls(),
+    fetchSitemapUrls(lang),
+    fetchOfferUrls(lang),
   ]);
   const sitemapUrls = sitemap.status === 'fulfilled' ? sitemap.value : [];
   const offerUrls   = offers.status  === 'fulfilled' ? offers.value  : [];
   const all = [...new Set([...sitemapUrls, ...offerUrls])];
-  console.log(`Pool: ${sitemapUrls.length} assortiment + ${offerUrls.length} aanbiedingen = ${all.length} totaal`);
+  console.log(`Pool (${lang}): ${sitemapUrls.length} assortiment + ${offerUrls.length} aanbiedingen = ${all.length} totaal`);
   return all;
 }
 
@@ -178,19 +182,22 @@ function saveCache(data) {
 }
 
 // ── Product van de dag ────────────────────────────────────────────────────────
-async function getProductOfDay(dateKey) {
+async function getProductOfDay(dateKey, lang = 'nl') {
   const cache = loadCache();
-  if (cache[dateKey]) return cache[dateKey];
+  const cacheKey = `${lang}:${dateKey}`;
+  if (cache[cacheKey]) return cache[cacheKey];
 
   // Pool vernieuwen als ouder dan 7 dagen of te klein
-  const poolAge = cache.__poolDate
-    ? Math.floor((Date.now() - cache.__poolDate) / 86400000)
+  const poolKey = `__pool:${lang}`;
+  const poolDateKey = `__poolDate:${lang}`;
+  const poolAge = cache[poolDateKey]
+    ? Math.floor((Date.now() - cache[poolDateKey]) / 86400000)
     : 99;
-  if (!cache.__pool || cache.__pool.length < 10 || poolAge >= 7) {
-    console.log('Productpool vernieuwen (sitemap + weekaanbiedingen)…');
-    cache.__pool     = await fetchProductPool();
-    cache.__poolDate = Date.now();
-    if (!cache.__pool.length) throw new Error('Geen producten gevonden op aldi.be');
+  if (!cache[poolKey] || cache[poolKey].length < 10 || poolAge >= 7) {
+    console.log(`Productpool vernieuwen (${lang})…`);
+    cache[poolKey]     = await fetchProductPool(lang);
+    cache[poolDateKey] = Date.now();
+    if (!cache[poolKey].length) throw new Error(`Geen producten gevonden op aldi.be/${lang}`);
     saveCache(cache);
   }
 
@@ -201,11 +208,11 @@ async function getProductOfDay(dateKey) {
 
   // Maximaal 5 kandidaten proberen als scrapen mislukt of geen prijs
   while (!product && tries < 5) {
-    const idx = Math.floor(rng() * cache.__pool.length);
-    const url  = cache.__pool[(idx + tries) % cache.__pool.length];
+    const idx = Math.floor(rng() * cache[poolKey].length);
+    const url  = cache[poolKey][(idx + tries) % cache[poolKey].length];
     tries++;
     try {
-      console.log(`Product ophalen (poging ${tries}): ${url}`);
+      console.log(`Product ophalen (${lang}, poging ${tries}): ${url}`);
       const p = await scrapeProduct(url);
       if (p.name && p.price > 0) product = p;
       else console.log(`  → geen prijs gevonden, volgende proberen`);
@@ -215,7 +222,7 @@ async function getProductOfDay(dateKey) {
   }
 
   if (!product) throw new Error('Kon geen geldig product ophalen na 5 pogingen');
-  cache[dateKey] = product;
+  cache[cacheKey] = product;
   saveCache(cache);
   return product;
 }
@@ -225,8 +232,9 @@ app.use((_, res, next) => { res.header('Access-Control-Allow-Origin', '*'); next
 
 app.get('/api/product', async (req, res) => {
   const dateKey = req.query.date || getTodayKey();
+  const lang = req.query.lang || 'nl';
   try {
-    const product = await getProductOfDay(dateKey);
+    const product = await getProductOfDay(dateKey, lang);
     res.json(product);
   } catch (err) {
     console.error('Fout:', err.message);
