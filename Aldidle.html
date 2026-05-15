@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aldidle – Raad de prijs!</title>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=DM+Sans:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --blue:      #003087;
+    --red:       #E2001A;
+    --white:     #ffffff;
+    --offwhite:  #f5f7fc;
+    --light-blue:#d6e4f7;
+    --dark-blue: #001a52;
+    --correct:   #16a34a;
+    --too-high:  #dc2626;
+    --too-low:   #2563eb;
+    --text:      #1a1a2e;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--offwhite);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  header {
+    width: 100%;
+    background: var(--blue);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .header-top {
+    width: 100%;
+    max-width: 700px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.5rem 0.9rem;
+  }
+
+  .aldi-logo { display:flex; flex-direction:column; align-items:center; line-height:1; }
+  .aldi-logo .logo-aldi { font-family:'Anton',sans-serif; font-size:2rem; color:var(--white); letter-spacing:4px; }
+  .aldi-logo .logo-sub  { font-size:0.5rem; letter-spacing:4px; color:rgba(255,255,255,.55); font-weight:700; text-transform:uppercase; margin-top:-1px; }
+
+  .header-right { text-align:right; }
+  .header-right h1 { font-family:'Anton',sans-serif; font-size:clamp(1.4rem,5vw,2.1rem); color:var(--white); letter-spacing:1px; line-height:1; }
+  .header-right h1 span { color:#FFCC00; }
+  .header-right .date-pill {
+    display:inline-flex; align-items:center; gap:5px;
+    background:rgba(255,255,255,.12);
+    border-radius:20px;
+    padding:3px 10px;
+    font-size:0.68rem;
+    color:rgba(255,255,255,.7);
+    margin-top:5px;
+    letter-spacing:.5px;
+  }
+  .header-stripe { width:100%; height:5px; background:var(--red); }
+
+  #app { width:100%; max-width:680px; padding:1.25rem 1.25rem 2rem; flex:1; }
+
+  .card {
+    background:var(--white);
+    border-radius:16px;
+    box-shadow:0 2px 16px rgba(0,48,135,.09);
+    padding:1.75rem;
+    margin-bottom:1rem;
+    border:1px solid rgba(0,48,135,.07);
+  }
+
+  /* LOADING */
+  #loading-screen { text-align:center; padding:3rem 1rem; }
+  .spinner {
+    width:52px; height:52px;
+    border:4px solid var(--light-blue);
+    border-top-color:var(--blue);
+    border-radius:50%;
+    animation:spin .8s linear infinite;
+    margin:0 auto 1.25rem;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .loading-label { color:var(--blue); font-weight:700; font-size:1rem; margin-bottom:.4rem; }
+  #loading-msg   { color:#6b7280; font-size:.88rem; }
+
+  /* PRODUCT */
+  .product-header { display:flex; gap:1.25rem; align-items:flex-start; margin-bottom:1.5rem; }
+
+  .product-img-wrap {
+    flex-shrink:0; width:120px; height:120px;
+    background:var(--offwhite);
+    border-radius:12px; border:2px solid var(--light-blue);
+    display:flex; align-items:center; justify-content:center;
+    overflow:hidden; position:relative;
+  }
+  .product-img-wrap img { width:100%; height:100%; object-fit:contain; padding:8px; }
+  .emoji-fb { font-size:3.5rem; }
+  .img-source-badge {
+    position:absolute; bottom:4px; right:4px;
+    background:var(--red); color:white;
+    font-size:.52rem; font-weight:700;
+    padding:2px 5px; border-radius:4px;
+    letter-spacing:.5px; text-transform:uppercase;
+  }
+
+  .product-info { flex:1; min-width:0; }
+  .product-category {
+    display:inline-block; background:var(--light-blue); color:var(--blue);
+    font-size:.67rem; font-weight:700; text-transform:uppercase; letter-spacing:1.2px;
+    padding:3px 10px; border-radius:20px; margin-bottom:.5rem;
+  }
+  .product-name { font-size:1.15rem; font-weight:900; color:var(--text); line-height:1.3; margin-bottom:.35rem; }
+  .product-desc { font-size:.78rem; color:#6b7280; line-height:1.5; }
+  .price-mystery { display:flex; align-items:center; gap:8px; margin-top:.75rem; }
+  .price-label   { font-size:.72rem; color:#9ca3af; font-weight:600; }
+  .price-boxes   { display:flex; gap:4px; align-items:flex-end; }
+  .price-box { width:18px; height:24px; background:var(--blue); border-radius:4px; opacity:.7; }
+  .price-sep { width:5px; height:5px; background:var(--blue); border-radius:50%; opacity:.7; margin-bottom:3px; }
+
+  /* ATTEMPTS */
+  .attempts-row { display:flex; gap:7px; margin-bottom:1.25rem; justify-content:center; }
+  .attempt-dot {
+    width:40px; height:40px; border-radius:10px;
+    border:2px solid #e5e7eb; background:#f9fafb;
+    display:flex; align-items:center; justify-content:center;
+    font-size:1.1rem; font-weight:700; color:transparent;
+    transition:all .25s;
+  }
+  .attempt-dot.current {
+    border-color:var(--blue); background:var(--light-blue);
+    animation:pulse-blue 1.3s ease-in-out infinite;
+  }
+  @keyframes pulse-blue {
+    0%,100% { box-shadow:0 0 0 0 rgba(0,48,135,.3); }
+    50%      { box-shadow:0 0 0 5px rgba(0,48,135,0); }
+  }
+  .attempt-dot.used-correct { background:var(--correct); border-color:var(--correct); color:white; }
+  .attempt-dot.used-high    { background:var(--red);     border-color:var(--red);     color:white; }
+  .attempt-dot.used-low     { background:var(--too-low); border-color:var(--too-low); color:white; }
+
+  #progress-bar-wrap { height:4px; background:#e5e7eb; border-radius:2px; margin-bottom:1.25rem; overflow:hidden; }
+  #progress-bar      { height:100%; background:linear-gradient(90deg,var(--blue),var(--red)); border-radius:2px; transition:width .4s ease; width:0%; }
+
+  /* INPUT */
+  .input-section { margin-bottom:.5rem; }
+  .price-input-wrap {
+    display:flex; align-items:stretch;
+    border:2.5px solid #d1d5db; border-radius:12px;
+    overflow:hidden; transition:border-color .2s,box-shadow .2s;
+    margin-bottom:.75rem; background:white;
+  }
+  .price-input-wrap:focus-within { border-color:var(--blue); box-shadow:0 0 0 3px rgba(0,48,135,.1); }
+  .currency-symbol {
+    padding:0 1rem; color:var(--blue); font-size:1.5rem;
+    font-family:'Anton',sans-serif; background:var(--light-blue);
+    display:flex; align-items:center; border-right:2px solid #d1d5db;
+  }
+  #price-input {
+    flex:1; background:none; border:none; outline:none;
+    color:var(--text); font-family:'Anton',sans-serif; font-size:2rem;
+    padding:.7rem 1rem; letter-spacing:1px; width:100%;
+  }
+  #price-input::placeholder { color:#d1d5db; }
+
+  .guess-btn {
+    width:100%; padding:.95rem;
+    background:var(--red); color:white; border:none; border-radius:12px;
+    font-family:'Anton',sans-serif; font-size:1.3rem; letter-spacing:2px;
+    cursor:pointer; transition:all .18s;
+    box-shadow:0 3px 12px rgba(226,0,26,.28);
+  }
+  .guess-btn:hover:not(:disabled) { background:#c0001a; transform:translateY(-1px); box-shadow:0 6px 20px rgba(226,0,26,.38); }
+  .guess-btn:disabled { opacity:.4; cursor:not-allowed; }
+  .error-msg { color:var(--red); font-size:.82rem; text-align:center; padding:.4rem; }
+
+  /* FEEDBACK */
+  .feedback-list { display:flex; flex-direction:column; gap:7px; margin-top:1rem; }
+  .feedback-item {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 14px; border-radius:10px;
+    animation:slide-in .35s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  @keyframes slide-in { from{opacity:0;transform:translateX(-16px)} to{opacity:1;transform:translateX(0)} }
+  .feedback-item.correct  { background:#f0fdf4; border:1.5px solid #86efac; }
+  .feedback-item.too-high { background:#fff5f5; border:1.5px solid #fca5a5; }
+  .feedback-item.too-low  { background:#eff6ff; border:1.5px solid #93c5fd; }
+  .feedback-icon  { font-size:1.2rem; flex-shrink:0; }
+  .feedback-price { font-weight:800; font-size:1rem; color:var(--text); }
+  .feedback-hint  { font-size:.78rem; color:#6b7280; margin-left:auto; white-space:nowrap; }
+
+  .legend { display:flex; gap:1rem; justify-content:center; flex-wrap:wrap; margin-top:.75rem; font-size:.72rem; color:#9ca3af; }
+  .legend span { display:flex; align-items:center; gap:5px; }
+  .legend-dot  { width:8px; height:8px; border-radius:50%; }
+
+  /* RESULT */
+  #result-screen { text-align:center; padding-top:.5rem; }
+  .result-emoji { font-size:3.5rem; margin-bottom:.6rem; }
+  .result-title { font-family:'Anton',sans-serif; font-size:2.2rem; letter-spacing:2px; margin-bottom:.4rem; }
+  .result-title.win  { color:var(--correct); }
+  .result-title.lose { color:var(--red); }
+  .result-price-reveal { font-size:.95rem; color:#6b7280; margin-bottom:1.25rem; }
+  .real-price { font-family:'Anton',sans-serif; font-size:1.8rem; color:var(--blue); }
+
+  /* SHARE BUTTON */
+  .share-btn {
+    width:100%; padding:.85rem;
+    background:white; color:var(--blue);
+    border:2px solid var(--blue); border-radius:12px;
+    font-family:'Anton',sans-serif; font-size:1.1rem; letter-spacing:2px;
+    cursor:pointer; transition:all .18s; margin-bottom:.75rem;
+  }
+  .share-btn:hover { background:var(--light-blue); }
+  .share-copied { color:var(--correct); font-size:.82rem; margin-top:-.4rem; margin-bottom:.75rem; font-weight:700; display:none; }
+
+  /* ALREADY PLAYED */
+  .already-played {
+    text-align:center; padding:1.5rem 1rem;
+  }
+  .already-played .big-icon { font-size:3rem; margin-bottom:.75rem; }
+  .already-played h2 { font-family:'Anton',sans-serif; font-size:1.8rem; color:var(--blue); letter-spacing:1px; margin-bottom:.4rem; }
+  .already-played p  { color:#6b7280; font-size:.9rem; margin-bottom:1.25rem; line-height:1.6; }
+  .countdown-wrap { background:var(--light-blue); border-radius:12px; padding:1rem; margin-bottom:1.25rem; }
+  .countdown-label { font-size:.72rem; color:var(--blue); font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom:.3rem; }
+  #countdown { font-family:'Anton',sans-serif; font-size:2rem; color:var(--blue); letter-spacing:2px; }
+
+  .play-again-btn {
+    padding:.9rem 2.5rem; background:var(--blue); color:white; border:none;
+    border-radius:12px; font-family:'Anton',sans-serif; font-size:1.2rem;
+    letter-spacing:2px; cursor:pointer; transition:all .18s;
+    box-shadow:0 3px 12px rgba(0,48,135,.22);
+  }
+  .play-again-btn:hover { background:var(--dark-blue); transform:translateY(-1px); }
+
+  .shake { animation:shake .38s ease; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-7px)} 40%,80%{transform:translateX(7px)} }
+
+  footer {
+    width:100%; background:var(--blue);
+    color:rgba(255,255,255,.3); font-size:.7rem;
+    text-align:center; padding:.85rem 1rem; margin-top:auto;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <div class="aldi-logo">
+      <span class="logo-aldi">ALDI</span>
+      <span class="logo-sub">België</span>
+    </div>
+    <div class="header-right">
+      <h1>RAAD DE <span>PRIJS</span></h1>
+      <div class="date-pill" id="header-date">📅 –</div>
+    </div>
+  </div>
+  <div class="header-stripe"></div>
+</header>
+
+<div id="app">
+  <div id="loading-screen" class="card">
+    <div class="spinner"></div>
+    <div class="loading-label">Dagelijks product ophalen…</div>
+    <p id="loading-msg">Aldi-rekken scannen…</p>
+  </div>
+</div>
+
+<footer>Aldidlee is een fan-project &nbsp;·&nbsp; Niet gelieerd aan Aldi België nv</footer>
+
+<script>
+const MAX_GUESSES = 6;
+const MARGIN = 3.5 / 100;
+const STORAGE_KEY = 'aldidle_daily';
+
+let product  = null;
+let guesses  = [];
+let gameOver = false;
+let todayKey = '';   // e.g. "2026-05-15"
+
+// ── Date helpers ──────────────────────────────────────────────────────────
+function getTodayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function getDayNumber() {
+  // Count days since launch: 2026-01-01
+  const launch = new Date('2026-01-01');
+  const today  = new Date();
+  today.setHours(0,0,0,0);
+  launch.setHours(0,0,0,0);
+  return Math.floor((today - launch) / 86400000) + 1;
+}
+
+function formatDateNL(key) {
+  const [y,m,d] = key.split('-');
+  const months = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+  return `${parseInt(d)} ${months[parseInt(m)-1]} ${y}`;
+}
+
+// Deterministic seed from date string → integer
+function dateToSeed(dateStr) {
+  let h = 0;
+  for (let i = 0; i < dateStr.length; i++) {
+    h = Math.imul(31, h) + dateStr.charCodeAt(i) | 0;
+  }
+  return Math.abs(h);
+}
+
+// Seeded pseudo-random (mulberry32)
+function seededRandom(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// ── Local state ───────────────────────────────────────────────────────────
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const state = JSON.parse(raw);
+    if (state.date !== todayKey) return null;   // old day
+    return state;
+  } catch { return null; }
+}
+
+function saveState(data) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ date: todayKey, ...data })); }
+  catch {}
+}
+
+// ── Fetch product van lokale scraper-server ────────────────────────────────
+async function fetchProduct(dateKey) {
+  const resp = await fetch(`/api/product?date=${dateKey}`);
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error || `Server fout ${resp.status}`);
+  }
+  const data = await resp.json();
+  if (!data.name || !data.price) throw new Error('Ongeldig product ontvangen van server');
+  return data;
+}
+
+// ── Build game UI ─────────────────────────────────────────────────────────
+function buildGameUI(restoredGuesses) {
+  const app = document.getElementById('app');
+  const hasImg = product.imageUrl && product.imageUrl.startsWith('http');
+  const safeId = 'img_' + Date.now();
+
+  const imgContent = hasImg
+    ? `<img src="${product.imageUrl}" alt="${product.name}"
+            onerror="this.style.display='none';document.getElementById('${safeId}').style.display='flex'">
+       <span id="${safeId}" class="emoji-fb" style="display:none">${product.emoji||'🛒'}</span>
+       <span class="img-source-badge">aldi.be</span>`
+    : `<span class="emoji-fb">${product.emoji||'🛒'}</span>`;
+
+  app.innerHTML = `
+    <div class="card" id="product-card">
+
+      <div class="product-header">
+        <div class="product-img-wrap">${imgContent}</div>
+        <div class="product-info">
+          <div class="product-category">${product.category}</div>
+          <div class="product-name">${product.name}</div>
+          <div class="product-desc">${product.description}</div>
+          <div class="price-mystery">
+            <span class="price-label">Prijs:</span>
+            <div class="price-boxes">
+              <div class="price-box"></div>
+              <div class="price-sep"></div>
+              <div class="price-box"></div>
+              <div class="price-box"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+
+      <div class="attempts-row" id="attempts-row">
+        ${Array.from({length:MAX_GUESSES},(_,i)=>
+          `<div class="attempt-dot${i===0?' current':''}" id="dot-${i}"></div>`
+        ).join('')}
+      </div>
+
+      <div class="input-section" id="input-section">
+        <div class="price-input-wrap" id="input-wrap">
+          <span class="currency-symbol">€</span>
+          <input type="number" id="price-input" placeholder="0.00"
+                 step="0.01" min="0" max="9999" autocomplete="off">
+        </div>
+        <button class="guess-btn" id="guess-btn" onclick="submitGuess()">RAAD DE PRIJS</button>
+        <div id="error-msg" class="error-msg" style="display:none"></div>
+      </div>
+
+      <div class="feedback-list" id="feedback-list"></div>
+
+      <div class="legend">
+        <span><div class="legend-dot" style="background:var(--too-low)"></div>Te laag</span>
+        <span><div class="legend-dot" style="background:var(--too-high)"></div>Te hoog</span>
+        <span><div class="legend-dot" style="background:var(--correct)"></div>Correct!</span>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('price-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitGuess();
+  });
+
+  // Replay saved guesses silently
+  if (restoredGuesses && restoredGuesses.length > 0) {
+    for (const g of restoredGuesses) replayGuess(g);
+    if (gameOver) setTimeout(() => showResult(didWin()), 300);
+  } else {
+    document.getElementById('price-input').focus();
+  }
+}
+
+function didWin() {
+  if (!guesses.length) return false;
+  const last = guesses[guesses.length - 1];
+  const margin = product.price * MARGIN;
+  return last >= product.price - margin && last <= product.price + margin;
+}
+
+// ── Replay a guess without animation (for restore) ────────────────────────
+function replayGuess(val) {
+  const idx = guesses.length;
+  guesses.push(val);
+
+  const margin = product.price * MARGIN;
+  const low    = product.price - margin;
+  const high   = product.price + margin;
+
+  let type, icon, hint;
+  if (val >= low && val <= high)    { type='correct';  icon='✓'; hint='🎯 Raak!'; }
+  else if (val < low)               { type='too-low';  icon='↑'; hint=val<product.price*.5?'📉 Veel te laag':'⬆️ Te laag'; }
+  else                              { type='too-high'; icon='↓'; hint=val>product.price*1.5?'📈 Veel te hoog':'⬇️ Te hoog'; }
+
+  const dot = document.getElementById(`dot-${idx}`);
+  if (dot) {
+    dot.classList.remove('current');
+    dot.classList.add(`used-${type==='correct'?'correct':type==='too-high'?'high':'low'}`);
+    dot.textContent = icon;
+  }
+  if (idx+1 < MAX_GUESSES) document.getElementById(`dot-${idx+1}`)?.classList.add('current');
+
+  document.getElementById('progress-bar').style.width = `${((idx+1)/MAX_GUESSES)*100}%`;
+
+  const li = document.createElement('div');
+  li.className = `feedback-item ${type==='correct'?'correct':type==='too-high'?'too-high':'too-low'}`;
+  li.style.animation = 'none';
+  li.innerHTML = `
+    <span class="feedback-icon">${icon}</span>
+    <span class="feedback-price">€${val.toFixed(2)}</span>
+    <span class="feedback-hint">${hint}</span>
+  `;
+  document.getElementById('feedback-list').prepend(li);
+
+  if (type === 'correct' || guesses.length >= MAX_GUESSES) {
+    gameOver = true;
+    const btn = document.getElementById('guess-btn');
+    if (btn) btn.disabled = true;
+  }
+}
+
+// ── Submit new guess ──────────────────────────────────────────────────────
+function submitGuess() {
+  if (gameOver) return;
+  const input = document.getElementById('price-input');
+  const val   = parseFloat(input.value);
+
+  if (isNaN(val) || val <= 0) { showError("Voer een geldige prijs in."); shake(); return; }
+  hideError();
+
+  const margin = product.price * MARGIN;
+  const low    = product.price - margin;
+  const high   = product.price + margin;
+
+  let type, icon, hint;
+  if (val >= low && val <= high)    { type='correct';  icon='✓'; hint='🎯 Raak!'; }
+  else if (val < low)               { type='too-low';  icon='↑'; hint=val<product.price*.5?'📉 Veel te laag':'⬆️ Te laag'; }
+  else                              { type='too-high'; icon='↓'; hint=val>product.price*1.5?'📈 Veel te hoog':'⬇️ Te hoog'; }
+
+  const idx = guesses.length;
+  guesses.push(val);
+
+  const dot = document.getElementById(`dot-${idx}`);
+  dot.classList.remove('current');
+  dot.classList.add(`used-${type==='correct'?'correct':type==='too-high'?'high':'low'}`);
+  dot.textContent = icon;
+  if (idx+1 < MAX_GUESSES) document.getElementById(`dot-${idx+1}`)?.classList.add('current');
+
+  document.getElementById('progress-bar').style.width = `${((idx+1)/MAX_GUESSES)*100}%`;
+
+  const li = document.createElement('div');
+  li.className = `feedback-item ${type==='correct'?'correct':type==='too-high'?'too-high':'too-low'}`;
+  li.innerHTML = `
+    <span class="feedback-icon">${icon}</span>
+    <span class="feedback-price">€${val.toFixed(2)}</span>
+    <span class="feedback-hint">${hint}</span>
+  `;
+  document.getElementById('feedback-list').prepend(li);
+
+  input.value = '';
+  input.focus();
+
+  // Persist progress
+  saveState({ product, guesses, done: false });
+
+  if (type === 'correct') {
+    gameOver = true;
+    saveState({ product, guesses, done: true, won: true });
+    setTimeout(() => showResult(true), 700);
+  } else if (guesses.length >= MAX_GUESSES) {
+    gameOver = true;
+    document.getElementById('guess-btn').disabled = true;
+    saveState({ product, guesses, done: true, won: false });
+    setTimeout(() => showResult(false), 700);
+  }
+}
+
+// ── Result + share ────────────────────────────────────────────────────────
+function buildShareText(won) {
+  const icons = guesses.map(v => {
+    const m = product.price * MARGIN;
+    if (v >= product.price - m && v <= product.price + m) return '🟩';
+    return v < product.price ? '🟦' : '🟥';
+  });
+  const remaining = MAX_GUESSES - guesses.length;
+  const empties   = Array(remaining).fill('⬜');
+  return `Aldidle #${getDayNumber()} — ${formatDateNL(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ Geraden in ${guesses.length}/${MAX_GUESSES}`:`❌ Niet geraden`}\nhttps://aldidle.be`;
+}
+
+function showResult(won) {
+  const sec = document.getElementById('input-section');
+  if (sec) sec.style.display = 'none';
+
+  const div = document.createElement('div');
+  div.id = 'result-screen';
+  div.innerHTML = won
+    ? `<div class="result-emoji">🎉</div>
+       <div class="result-title win">CORRECT!</div>
+       <div class="result-price-reveal">De prijs was <span class="real-price">€${product.price.toFixed(2)}</span></div>
+       <p style="color:#6b7280;font-size:.82rem;margin-bottom:1.25rem">Geraden in ${guesses.length} poging${guesses.length>1?'en':''}</p>`
+    : `<div class="result-emoji">😬</div>
+       <div class="result-title lose">HELAAS!</div>
+       <div class="result-price-reveal">De echte prijs was <span class="real-price">€${product.price.toFixed(2)}</span></div>
+       <p style="color:#6b7280;font-size:.82rem;margin-bottom:1.25rem">Morgen weer een nieuwe kans!</p>`;
+
+  // Share button
+  const shareText = buildShareText(won);
+  const shareBtn  = document.createElement('button');
+  shareBtn.className   = 'share-btn';
+  shareBtn.textContent = '📤 DEEL JE RESULTAAT';
+  shareBtn.onclick = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: shareText });
+      } else {
+        await navigator.clipboard.writeText(shareText);
+        copiedMsg.style.display = 'block';
+        setTimeout(() => copiedMsg.style.display = 'none', 2500);
+      }
+    } catch {}
+  };
+
+  const copiedMsg = document.createElement('div');
+  copiedMsg.className   = 'share-copied';
+  copiedMsg.textContent = '✓ Gekopieerd naar klembord!';
+
+  // Countdown
+  const countdownWrap = document.createElement('div');
+  countdownWrap.className = 'countdown-wrap';
+  countdownWrap.innerHTML = `
+    <div class="countdown-label">Volgend product over</div>
+    <div id="countdown">--:--:--</div>
+  `;
+
+  div.appendChild(shareBtn);
+  div.appendChild(copiedMsg);
+  div.appendChild(countdownWrap);
+  document.getElementById('product-card').appendChild(div);
+
+  startCountdown();
+}
+
+// ── Already-played screen ─────────────────────────────────────────────────
+function showAlreadyPlayed(state) {
+  const app = document.getElementById('app');
+  const won = state.won;
+  const shareText = (() => {
+    const icons = state.guesses.map(v => {
+      const m = state.product.price * MARGIN;
+      if (v >= state.product.price - m && v <= state.product.price + m) return '🟩';
+      return v < state.product.price ? '🟦' : '🟥';
+    });
+    const empties = Array(MAX_GUESSES - state.guesses.length).fill('⬜');
+    return `Aldidle #${getDayNumber()} — ${formatDateNL(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ Geraden in ${state.guesses.length}/${MAX_GUESSES}`:`❌ Niet geraden`}\nhttps://aldidle.be`;
+  })();
+
+  app.innerHTML = `
+    <div class="card">
+      <div class="already-played">
+        <div class="big-icon">${won ? '🏆' : '😔'}</div>
+        <h2>${won ? 'AL GESPEELD!' : 'AL GESPEELD!'}</h2>
+        <p>
+          Je hebt het product van vandaag al geraden${won ? ' en gewonnen' : ''}.<br>
+          De prijs van <strong>${state.product.name}</strong> was <strong>€${state.product.price.toFixed(2)}</strong>.<br>
+          Morgen staat er een nieuw product klaar!
+        </p>
+        <div class="countdown-wrap">
+          <div class="countdown-label">Volgend product over</div>
+          <div id="countdown">--:--:--</div>
+        </div>
+        <button class="share-btn" id="share-again-btn">📤 DEEL JE RESULTAAT</button>
+        <div id="share-copied" class="share-copied">✓ Gekopieerd!</div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('share-again-btn').onclick = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: shareText });
+      } else {
+        await navigator.clipboard.writeText(shareText);
+        const el = document.getElementById('share-copied');
+        el.style.display = 'block';
+        setTimeout(() => el.style.display = 'none', 2500);
+      }
+    } catch {}
+  };
+
+  startCountdown();
+}
+
+function startCountdown() {
+  function tick() {
+    const now  = new Date();
+    const next = new Date(now);
+    next.setHours(24, 0, 0, 0);   // midnight
+    const diff = next - now;
+    const hh   = String(Math.floor(diff / 3600000)).padStart(2, '0');
+    const mm   = String(Math.floor((diff % 3600000) / 60000)).padStart(2, '0');
+    const ss   = String(Math.floor((diff % 60000) / 1000)).padStart(2, '0');
+    const el   = document.getElementById('countdown');
+    if (el) el.textContent = `${hh}:${mm}:${ss}`;
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+
+function shake() {
+  const w = document.getElementById('input-wrap');
+  w.classList.remove('shake'); void w.offsetWidth; w.classList.add('shake');
+}
+function showError(m) { const e=document.getElementById('error-msg'); e.textContent=m; e.style.display='block'; }
+function hideError()  { const e=document.getElementById('error-msg'); if(e) e.style.display='none'; }
+
+// ── Start ─────────────────────────────────────────────────────────────────
+async function startGame() {
+  todayKey = getTodayKey();
+  document.getElementById('header-date').textContent = `📅 ${formatDateNL(todayKey)}`;
+
+  // Check if already completed today
+  const state = loadState();
+  if (state && state.done) {
+    showAlreadyPlayed(state);
+    return;
+  }
+
+  // If in-progress today, restore product but re-fetch if not cached
+  if (state && state.product) {
+    product = state.product;
+    guesses = [];
+    gameOver = false;
+    buildGameUI(state.guesses || []);
+    return;
+  }
+
+  // Fresh game
+  product = null; guesses = []; gameOver = false;
+
+  document.getElementById('app').innerHTML = `
+    <div id="loading-screen" class="card" style="text-align:center;padding:3rem 1rem">
+      <div class="spinner"></div>
+      <div class="loading-label">Product van de dag ophalen…</div>
+      <p id="loading-msg">Aldi-rekken scannen…</p>
+    </div>`;
+
+  const msgs = ['Aldi-rekken scannen…','Productpagina ophalen…','Afbeelding laden…','Prijskaartje controleren…','Bijna klaar…'];
+  let mi = 0;
+  const ticker = setInterval(() => {
+    mi = (mi+1) % msgs.length;
+    const el = document.getElementById('loading-msg');
+    if (el) el.textContent = msgs[mi];
+  }, 1800);
+
+  try {
+    product = await fetchProduct(todayKey);
+    clearInterval(ticker);
+    saveState({ product, guesses: [], done: false });
+    buildGameUI([]);
+  } catch(err) {
+    clearInterval(ticker);
+    document.getElementById('app').innerHTML = `
+      <div class="card" style="text-align:center;padding:2rem">
+        <div style="font-size:2rem;margin-bottom:1rem">⚠️</div>
+        <div style="color:var(--blue);font-weight:700;margin-bottom:.5rem">Kon geen product laden</div>
+        <div style="color:#6b7280;font-size:.85rem;margin-bottom:1.5rem">${err.message}</div>
+        <button class="play-again-btn" onclick="startGame()">PROBEER OPNIEUW</button>
+      </div>`;
+  }
+}
+
+startGame();
+</script>
+</body>
+</html>
