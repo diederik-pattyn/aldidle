@@ -298,6 +298,7 @@ const translations = {
     'afbeelding-laden': 'Afbeelding laden…',
     'prijskaartje': 'Prijskaartje controleren…',
     'bijna-klaar': 'Bijna klaar…',
+    'server-opwarmt': 'Server wordt opgewarmd, even geduld…',
     'raad': 'RAAD DE PRIJS',
     'deel-resultaat': '📤 DEEL JE RESULTAAT',
     'gekopieerd': '✓ Gekopieerd naar klembord!',
@@ -336,6 +337,7 @@ const translations = {
     'afbeelding-laden': 'Chargement de l\'image…',
     'prijskaartje': 'Vérification de l\'étiquette…',
     'bijna-klaar': 'Presque prêt…',
+    'server-opwarmt': 'Le serveur chauffe, veuillez patienter…',
     'raad': 'DEVINEZ LE PRIX',
     'deel-resultaat': '📤 PARTAGER VOTRE RÉSULTAT',
     'gekopieerd': '✓ Copié dans le presse-papiers!',
@@ -374,6 +376,7 @@ const translations = {
     'afbeelding-laden': 'Bild wird geladen…',
     'prijskaartje': 'Preisschild überprüfen…',
     'bijna-klaar': 'Fast fertig…',
+    'server-opwarmt': 'Server wird aufgewärmt, bitte warten…',
     'raad': 'PREIS ERRATEN',
     'deel-resultaat': '📤 ERGEBNIS TEILEN',
     'gekopieerd': '✓ In Zwischenablage kopiert!',
@@ -485,14 +488,23 @@ function saveState(data) {
 
 // ── Fetch product van lokale scraper-server ────────────────────────────────
 async function fetchProduct(dateKey) {
-  const resp = await fetch(`/api/product?date=${dateKey}&lang=${currentLang}`);
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || `Server fout ${resp.status}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 55000);
+  try {
+    const resp = await fetch(`/api/product?date=${dateKey}&lang=${currentLang}`, { signal: controller.signal });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `Server fout ${resp.status}`);
+    }
+    const data = await resp.json();
+    if (!data.name || !data.price) throw new Error('Ongeldig product ontvangen van server');
+    return data;
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('Server reageert niet — probeer het opnieuw.');
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
-  const data = await resp.json();
-  if (!data.name || !data.price) throw new Error('Ongeldig product ontvangen van server');
-  return data;
 }
 
 // ── Build game UI ─────────────────────────────────────────────────────────
@@ -844,7 +856,7 @@ async function startGame() {
       <p id="loading-msg">${t('aldi-rekken')}</p>
     </div>`;
 
-  const msgs = [t('aldi-rekken'), t('product-pagina'), t('afbeelding-laden'), t('prijskaartje'), t('bijna-klaar')];
+  const msgs = [t('aldi-rekken'), t('product-pagina'), t('server-opwarmt'), t('afbeelding-laden'), t('prijskaartje'), t('bijna-klaar')];
   let mi = 0;
   const ticker = setInterval(() => {
     mi = (mi+1) % msgs.length;

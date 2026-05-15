@@ -181,18 +181,39 @@ function saveCache(data) {
   try { fs.writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2)); } catch {}
 }
 
+// ── Warmup: pool alvast ophalen bij opstarten ─────────────────────────────────
+let warmupPromise = null;
+
+async function warmupPool(lang = 'nl') {
+  const cache    = loadCache();
+  const poolKey  = `__pool:${lang}`;
+  const dateKey  = `__poolDate:${lang}`;
+  const poolAge  = cache[dateKey]
+    ? Math.floor((Date.now() - cache[dateKey]) / 86400000) : 99;
+  if (cache[poolKey] && cache[poolKey].length >= 10 && poolAge < 7) {
+    console.log(`Pool al gecached: ${cache[poolKey].length} producten`);
+    return;
+  }
+  console.log('Opwarmen: productpool ophalen…');
+  cache[poolKey] = await fetchProductPool(lang);
+  cache[dateKey] = Date.now();
+  saveCache(cache);
+  console.log(`Opgewarmd: ${cache[poolKey].length} producten klaar`);
+}
+
 // ── Product van de dag ────────────────────────────────────────────────────────
 async function getProductOfDay(dateKey, lang = 'nl') {
-  const cache = loadCache();
+  // Wacht tot warmup klaar is (als die nog bezig is)
+  if (warmupPromise) await warmupPromise.catch(() => {});
+
+  const cache    = loadCache();
   const cacheKey = `${lang}:${dateKey}`;
   if (cache[cacheKey]) return cache[cacheKey];
 
-  // Pool vernieuwen als ouder dan 7 dagen of te klein
-  const poolKey = `__pool:${lang}`;
+  const poolKey     = `__pool:${lang}`;
   const poolDateKey = `__poolDate:${lang}`;
-  const poolAge = cache[poolDateKey]
-    ? Math.floor((Date.now() - cache[poolDateKey]) / 86400000)
-    : 99;
+  const poolAge     = cache[poolDateKey]
+    ? Math.floor((Date.now() - cache[poolDateKey]) / 86400000) : 99;
   if (!cache[poolKey] || cache[poolKey].length < 10 || poolAge >= 7) {
     console.log(`Productpool vernieuwen (${lang})…`);
     cache[poolKey]     = await fetchProductPool(lang);
@@ -246,5 +267,6 @@ app.use(express.static(__dirname));
 app.get('/', (_, res) => res.sendFile(path.join(__dirname, 'Aldidle.html')));
 
 app.listen(PORT, () => {
-  console.log(`\n✅  AldiRaad draait op http://localhost:${PORT}\n`);
+  console.log(`\n✅  Aldidle draait op http://localhost:${PORT}\n`);
+  warmupPromise = warmupPool('nl').catch(e => console.error('Warmup mislukt:', e.message));
 });
