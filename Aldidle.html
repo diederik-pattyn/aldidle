@@ -450,10 +450,15 @@ function getDayNumber() {
   return Math.floor((today - launch) / 86400000) + 1;
 }
 
-function formatDateNL(key) {
+function formatDate(key) {
   const [y,m,d] = key.split('-');
-  const months = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
-  return `${parseInt(d)} ${months[parseInt(m)-1]} ${y}`;
+  const months = {
+    nl: ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'],
+    fr: ['jan','fév','mar','avr','mai','juin','juil','aoû','sep','oct','nov','déc'],
+    de: ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'],
+  };
+  const m3 = (months[currentLang] || months.nl)[parseInt(m)-1];
+  return `${parseInt(d)} ${m3} ${y}`;
 }
 
 // Deterministic seed from date string → integer
@@ -699,7 +704,7 @@ function buildShareText(won) {
   });
   const remaining = MAX_GUESSES - guesses.length;
   const empties   = Array(remaining).fill('⬜');
-  return `Aldidle #${getDayNumber()} — ${formatDateNL(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ ${t('geraden-in')} ${guesses.length}/${MAX_GUESSES}`:`❌ ${t('verloren-title')}`}\nhttps://aldidle.be`;
+  return `Aldidle #${getDayNumber()} — ${formatDate(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ ${t('geraden-in')} ${guesses.length}/${MAX_GUESSES}`:`❌ ${t('verloren-title')}`}\nhttps://aldidle.be`;
 }
 
 function showResult(won) {
@@ -766,7 +771,7 @@ function showAlreadyPlayed(state) {
       return v < state.product.price ? '🟦' : '🟥';
     });
     const empties = Array(MAX_GUESSES - state.guesses.length).fill('⬜');
-    return `Aldidle #${getDayNumber()} — ${formatDateNL(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ ${t('geraden-in')} ${state.guesses.length}/${MAX_GUESSES}`:`❌ ${t('verloren-title')}`}\nhttps://aldidle.be`;
+    return `Aldidle #${getDayNumber()} — ${formatDate(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ ${t('geraden-in')} ${state.guesses.length}/${MAX_GUESSES}`:`❌ ${t('verloren-title')}`}\nhttps://aldidle.be`;
   })();
 
   app.innerHTML = `
@@ -833,7 +838,7 @@ async function startGame() {
   document.getElementById('lang-select').value = currentLang;
   updateHeaderAndFooter();
   todayKey = getTodayKey();
-  document.getElementById('header-date').textContent = `📅 ${formatDateNL(todayKey)}`;
+  document.getElementById('header-date').textContent = `📅 ${formatDate(todayKey)}`;
 
   // Check if already completed today
   const state = loadState();
