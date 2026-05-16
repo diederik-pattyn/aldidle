@@ -704,7 +704,7 @@ function buildShareText(won) {
   });
   const remaining = MAX_GUESSES - guesses.length;
   const empties   = Array(remaining).fill('⬜');
-  return `Aldidle #${getDayNumber()} — ${formatDate(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ ${t('geraden-in')} ${guesses.length}/${MAX_GUESSES}`:`❌ ${t('verloren-title')}`}\nhttps://aldidle.be`;
+  return `Aldidle #${getDayNumber()} — ${formatDate(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ ${t('geraden-in')} ${guesses.length}/${MAX_GUESSES}`:`❌ ${t('verloren-title')}`}\nhttps://aldidle.daiza.be`;
 }
 
 function showResult(won) {
