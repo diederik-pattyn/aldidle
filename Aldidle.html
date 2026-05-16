@@ -414,8 +414,12 @@ let currentLang = localStorage.getItem(LANG_KEY) || 'nl';
 function t(key) { return translations[currentLang][key] || translations.nl[key] || key; }
 function updateHeaderAndFooter() {
   document.querySelector('.logo-sub').textContent = t('aldi-belgie');
-  const titleParts = t('raad-de-prijs').split(' ');
-  document.querySelector('.header-right h1').innerHTML = `${titleParts[0]} DE <span>${titleParts[2]}</span>`;
+  const full = t('raad-de-prijs');
+  const lastSpace = full.lastIndexOf(' ');
+  const main      = lastSpace >= 0 ? full.slice(0, lastSpace) : full;
+  const highlight  = lastSpace >= 0 ? full.slice(lastSpace + 1) : '';
+  document.querySelector('.header-right h1').innerHTML =
+    highlight ? `${main} <span>${highlight}</span>` : `<span>${main}</span>`;
   document.querySelector('footer').innerHTML = t('footer');
 }
 function changeLang(lang) {
