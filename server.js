@@ -84,17 +84,16 @@ async function fetchOfferUrls(lang = 'nl') {
   return [...seen];
 }
 
-// ── Gecombineerde pool bouwen ──────────────────────────────────────────────────
+// ── Pool bouwen: alleen sitemap, gesorteerd voor determinisme ─────────────────
+// Weekaanbiedingen worden NIET meegenomen — die veranderen wekelijks en
+// zouden bij elke cache-reset een ander product geven.
+// Sorteren zorgt dat dezelfde sitemap altijd dezelfde volgorde geeft,
+// ook al wordt de pool na een Render spin-down opnieuw opgebouwd.
 async function fetchProductPool(lang = 'nl') {
-  const [sitemap, offers] = await Promise.allSettled([
-    fetchSitemapUrls(lang),
-    fetchOfferUrls(lang),
-  ]);
-  const sitemapUrls = sitemap.status === 'fulfilled' ? sitemap.value : [];
-  const offerUrls   = offers.status  === 'fulfilled' ? offers.value  : [];
-  const all = [...new Set([...sitemapUrls, ...offerUrls])];
-  console.log(`Pool (${lang}): ${sitemapUrls.length} assortiment + ${offerUrls.length} aanbiedingen = ${all.length} totaal`);
-  return all;
+  const urls = await fetchSitemapUrls(lang);
+  urls.sort();
+  console.log(`Pool (${lang}): ${urls.length} assortiment URLs (gesorteerd)`);
+  return urls;
 }
 
 // ── Productpagina scrapen ─────────────────────────────────────────────────────
