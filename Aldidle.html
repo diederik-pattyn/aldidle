@@ -562,7 +562,8 @@ function buildGameUI(restoredGuesses) {
         <div class="price-input-wrap" id="input-wrap">
           <span class="currency-symbol">€</span>
           <input type="number" id="price-input" placeholder="0.00"
-                 step="0.01" min="0" max="9999" autocomplete="off">
+                 step="0.01" min="0" max="9999" autocomplete="off"
+                 inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*">
         </div>
         <button class="guess-btn" id="guess-btn" onclick="submitGuess()">${t('raad')}</button>
         <div id="error-msg" class="error-msg" style="display:none"></div>
