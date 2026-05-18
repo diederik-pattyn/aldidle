@@ -17,6 +17,9 @@
     --too-high:  #dc2626;
     --too-low:   #2563eb;
     --text:      #1a1a2e;
+    --stripe:    var(--red);          /* horizontale balk onder header */
+    --accent:    var(--light-blue);   /* achtergrond currency-symbol e.d. */
+    --accent-fg: var(--blue);         /* tekst-kleur op accent */
   }
 
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -64,7 +67,7 @@
     margin-top:5px;
     letter-spacing:.5px;
   }
-  .header-stripe { width:100%; height:5px; background:var(--red); }
+  .header-stripe { width:100%; height:5px; background:var(--stripe); }
 
   #app { width:100%; max-width:680px; padding:1.25rem 1.25rem 2rem; flex:1; }
 
@@ -159,8 +162,8 @@
   }
   .price-input-wrap:focus-within { border-color:var(--blue); box-shadow:0 0 0 3px rgba(0,48,135,.1); }
   .currency-symbol {
-    padding:0 1rem; color:var(--blue); font-size:1.5rem;
-    font-family:'Anton',sans-serif; background:var(--light-blue);
+    padding:0 1rem; color:var(--accent-fg); font-size:1.5rem;
+    font-family:'Anton',sans-serif; background:var(--accent);
     display:flex; align-items:center; border-right:2px solid #d1d5db;
   }
   #price-input {
@@ -259,8 +262,9 @@
     </div>
     <div class="header-right">
       <h1>RAAD DE <span>PRIJS</span></h1>
-      <div style="display:flex; gap:8px; margin-top:6px; justify-content:flex-end;">
+      <div style="display:flex; gap:8px; margin-top:6px; justify-content:flex-end; flex-wrap:wrap;">
         <div class="date-pill" id="header-date">📅 –</div>
+        <select id="market-select" onchange="changeMarket(this.value)" style="height:24px; font-size:0.7rem; border:1px solid rgba(255,255,255,.3); border-radius:4px; background:rgba(0,0,0,.2); color:white; padding:2px 6px; cursor:pointer; font-weight:700;"></select>
         <select id="lang-select" onchange="changeLang(this.value)" style="height:24px; font-size:0.7rem; border:1px solid rgba(255,255,255,.3); border-radius:4px; background:rgba(0,0,0,.2); color:white; padding:2px 6px; cursor:pointer; font-weight:700;">
           <option value="nl">NL</option>
           <option value="fr">FR</option>
@@ -285,8 +289,77 @@
 <script>
 const MAX_GUESSES = 6;
 const MARGIN = 3.5 / 100;
-const STORAGE_KEY = 'aldidle_daily';
+const STORAGE_KEY_PREFIX = 'aldidle_daily';
 const LANG_KEY = 'aldidle_lang';
+const MARKET_KEY = 'aldidle_market';
+
+// ── Markets registry ──────────────────────────────────────────────────────────
+// Add a new market by adding one entry here. Keep in sync with server.js.
+//   country   : ISO country code (drives flag and country-label translation)
+//   variant   : optional subdivision name (e.g. 'Nord', 'Süd'); null = no variant
+//   flag      : country emoji
+//   siteLangs : languages the site offers products in (UI lang falls back to these)
+//   theme     : optional — overrides for CSS variables (--blue, --red, --stripe, --accent, …)
+const MARKETS = {
+  'be':      { country: 'be', variant: null,   flag: '🇧🇪', siteLangs: ['nl','fr','de'], theme: null },
+  'de-nord': { country: 'de', variant: 'Nord', flag: '🇩🇪', siteLangs: ['de'],            theme: null },
+  'de-sued': {
+    country: 'de', variant: 'Süd', flag: '🇩🇪', siteLangs: ['de'],
+    theme: {
+      // Aldi Süd brand colors: blue, red, yellow
+      '--stripe':    '#FCE300',
+      '--accent':    '#FCE300',
+      '--accent-fg': '#003087',
+    },
+  },
+};
+const DEFAULT_MARKET = 'be';
+let currentMarket = localStorage.getItem(MARKET_KEY) || DEFAULT_MARKET;
+if (!MARKETS[currentMarket]) currentMarket = DEFAULT_MARKET;
+
+function getStorageKey() { return `${STORAGE_KEY_PREFIX}:${currentMarket}`; }
+
+// ── Product categories ────────────────────────────────────────────────────────
+// Stable keys come from the server; the UI translates them to the active language.
+const CATEGORIES = {
+  fish:          { nl: 'Vis & zeevruchten',  fr: 'Poisson & fruits de mer', de: 'Fisch & Meeresfrüchte' },
+  poultry:       { nl: 'Gevogelte',          fr: 'Volaille',                de: 'Geflügel'              },
+  meat:          { nl: 'Vlees',              fr: 'Viande',                  de: 'Fleisch'               },
+  cheese:        { nl: 'Kaas',               fr: 'Fromage',                 de: 'Käse'                  },
+  dairy:         { nl: 'Zuivel',             fr: 'Produits laitiers',       de: 'Milchprodukte'         },
+  eggs:          { nl: 'Eieren',             fr: 'Œufs',                    de: 'Eier'                  },
+  bakery:        { nl: 'Bakkerij',           fr: 'Boulangerie',             de: 'Bäckerei'              },
+  fruit:         { nl: 'Fruit',              fr: 'Fruits',                  de: 'Obst'                  },
+  vegetables:    { nl: 'Groenten',           fr: 'Légumes',                 de: 'Gemüse'                },
+  pasta:         { nl: 'Pasta',              fr: 'Pâtes',                   de: 'Pasta'                 },
+  grains:        { nl: 'Granen & rijst',     fr: 'Céréales & riz',          de: 'Getreide & Reis'       },
+  sauces:        { nl: 'Sauzen',             fr: 'Sauces',                  de: 'Saucen'                },
+  oils:          { nl: 'Oliën',              fr: 'Huiles',                  de: 'Öle'                   },
+  soup:          { nl: 'Soep',               fr: 'Soupe',                   de: 'Suppe'                 },
+  beer:          { nl: 'Bier',               fr: 'Bière',                   de: 'Bier'                  },
+  wine:          { nl: 'Wijn',               fr: 'Vin',                     de: 'Wein'                  },
+  water:         { nl: 'Water',              fr: 'Eau',                     de: 'Wasser'                },
+  drinks:        { nl: 'Dranken',            fr: 'Boissons',                de: 'Getränke'              },
+  coffee:        { nl: 'Koffie',             fr: 'Café',                    de: 'Kaffee'                },
+  tea:           { nl: 'Thee',               fr: 'Thé',                     de: 'Tee'                   },
+  chocolate:     { nl: 'Chocolade',          fr: 'Chocolat',                de: 'Schokolade'            },
+  cookies:       { nl: 'Koekjes',            fr: 'Biscuits',                de: 'Kekse'                 },
+  snacks:        { nl: 'Chips & snacks',     fr: 'Chips & snacks',          de: 'Chips & Snacks'        },
+  candy:         { nl: 'Snoep',              fr: 'Bonbons',                 de: 'Süßigkeiten'           },
+  nuts:          { nl: 'Noten',              fr: 'Noix',                    de: 'Nüsse'                 },
+  spread:        { nl: 'Beleg',              fr: 'Tartines',                de: 'Aufstrich'             },
+  frozen:        { nl: 'Diepvries',          fr: 'Surgelés',                de: 'Tiefkühl'              },
+  international: { nl: 'Internationaal',     fr: 'International',           de: 'International'         },
+  care:          { nl: 'Verzorging',         fr: 'Soins',                   de: 'Pflege'                },
+  cleaning:      { nl: 'Schoonmaak',         fr: 'Entretien',               de: 'Reinigung'             },
+  default:       { nl: 'Aanbieding',         fr: 'Promo',                   de: 'Angebot'               },
+};
+function getCategoryLabel(p) {
+  const c = CATEGORIES[p && p.categoryKey];
+  if (c) return c[currentLang] || c.nl;
+  // Fallback for older cached products that still carry the literal `category` field.
+  return (p && p.category) || '';
+}
 
 // ── Translations ──────────────────────────────────────────────────────────────
 const translations = {
@@ -326,8 +399,9 @@ const translations = {
     'probeer-opnieuw': 'PROBEER OPNIEUW',
     'prijs-label': 'Prijs:',
     'voer-geldige-prijs': 'Voer een geldige prijs in.',
-    'aldi-belgie': 'België',
-    'footer': 'Aldidle is een fan-project &nbsp;·&nbsp; Niet gelieerd aan Aldi België nv',
+    'country-be': 'België',
+    'country-de': 'Duitsland',
+    'footer': 'Aldidle is een fan-project &nbsp;·&nbsp; Niet gelieerd aan Aldi',
   },
   fr: {
     'raad-de-prijs': 'DEVINEZ LE PRIX',
@@ -365,8 +439,9 @@ const translations = {
     'probeer-opnieuw': 'RÉESSAYER',
     'prijs-label': 'Prix:',
     'voer-geldige-prijs': 'Entrez un prix valide.',
-    'aldi-belgie': 'Belgique',
-    'footer': 'Aldidle est un projet fan &nbsp;·&nbsp; Non affilié à Aldi Belgique sa',
+    'country-be': 'Belgique',
+    'country-de': 'Allemagne',
+    'footer': 'Aldidle est un projet fan &nbsp;·&nbsp; Non affilié à Aldi',
   },
   de: {
     'raad-de-prijs': 'PREIS ERRATEN',
@@ -404,16 +479,72 @@ const translations = {
     'probeer-opnieuw': 'ERNEUT VERSUCHEN',
     'prijs-label': 'Preis:',
     'voer-geldige-prijs': 'Geben Sie einen gültigen Preis ein.',
-    'aldi-belgie': 'Belgien',
-    'footer': 'Aldidle ist ein Fan-Projekt &nbsp;·&nbsp; Nicht mit Aldi Belgien verbunden',
+    'country-be': 'Belgien',
+    'country-de': 'Deutschland',
+    'footer': 'Aldidle ist ein Fan-Projekt &nbsp;·&nbsp; Nicht mit Aldi verbunden',
   },
 };
 
 // ── Language helpers ──────────────────────────────────────────────────────────
 let currentLang = localStorage.getItem(LANG_KEY) || 'nl';
 function t(key) { return translations[currentLang][key] || translations.nl[key] || key; }
+
+function getMarketSubtitle() {
+  const m = MARKETS[currentMarket];
+  if (m.variant) return m.variant;
+  return t(`country-${m.country}`);
+}
+function getMarketLabel(id) {
+  const m = MARKETS[id];
+  const country = t(`country-${m.country}`);
+  return m.variant ? `${m.flag} Aldi ${m.variant}` : `${m.flag} ${country}`;
+}
+function populateMarketSelect() {
+  const sel = document.getElementById('market-select');
+  sel.innerHTML = Object.keys(MARKETS).map(id =>
+    `<option value="${id}">${getMarketLabel(id)}</option>`
+  ).join('');
+  sel.value = currentMarket;
+}
+
+// Restrict the language selector to languages the current market actually offers
+// products in. If the active UI lang isn't supported, auto-switch to the market's
+// first language so the user never lands in an inconsistent state.
+function populateLangSelect() {
+  const sel = document.getElementById('lang-select');
+  const allowed = MARKETS[currentMarket].siteLangs;
+  if (!allowed.includes(currentLang)) {
+    currentLang = allowed[0];
+    localStorage.setItem(LANG_KEY, currentLang);
+  }
+  sel.innerHTML = allowed.map(l =>
+    `<option value="${l}">${l.toUpperCase()}</option>`
+  ).join('');
+  sel.value = currentLang;
+}
+
+// Defaults to fall back to when a market doesn't supply theme overrides.
+const THEME_DEFAULTS = {
+  '--blue':      '#003087',
+  '--red':       '#E2001A',
+  '--stripe':    '#E2001A',
+  '--accent':    '#d6e4f7',
+  '--accent-fg': '#003087',
+};
+function applyTheme() {
+  const overrides = (MARKETS[currentMarket].theme) || {};
+  const root = document.documentElement;
+  for (const [k, v] of Object.entries(THEME_DEFAULTS)) {
+    root.style.setProperty(k, overrides[k] || v);
+  }
+}
+
 function updateHeaderAndFooter() {
-  document.querySelector('.logo-sub').textContent = t('aldi-belgie');
+  // populateLangSelect may auto-correct currentLang for the current market,
+  // so it must run before any t()-based text rendering below.
+  populateLangSelect();
+  applyTheme();
+  document.querySelector('.logo-sub').textContent = getMarketSubtitle();
   const full = t('raad-de-prijs');
   const lastSpace = full.lastIndexOf(' ');
   const main      = lastSpace >= 0 ? full.slice(0, lastSpace) : full;
@@ -421,11 +552,47 @@ function updateHeaderAndFooter() {
   document.querySelector('.header-right h1').innerHTML =
     highlight ? `${main} <span>${highlight}</span>` : `<span>${main}</span>`;
   document.querySelector('footer').innerHTML = t('footer');
+  populateMarketSelect();
 }
-function changeLang(lang) {
+async function changeLang(lang) {
   currentLang = lang;
   localStorage.setItem(LANG_KEY, lang);
   document.getElementById('lang-select').value = lang;
+  updateHeaderAndFooter();
+
+  // Re-fetch the product on every language change, keeping existing guesses. For
+  // multilang markets this translates the name + description; for single-lang
+  // markets it ensures the latest server-side schema (e.g. categoryKey) is used.
+  const state = loadState();
+  if (state && state.product) {
+    document.getElementById('app').innerHTML = `
+      <div class="card" style="text-align:center;padding:3rem 1rem">
+        <div class="spinner"></div>
+        <div class="loading-label">${t('product-van-dag')}</div>
+      </div>`;
+    try {
+      const newProduct = await fetchProduct(todayKey);
+      const newState = { ...state, product: newProduct };
+      saveState(newState);
+      product  = newProduct;
+      guesses  = [];
+      gameOver = false;
+      if (newState.done) {
+        showAlreadyPlayed(newState);
+      } else {
+        buildGameUI(state.guesses || []);
+      }
+      return;
+    } catch (e) {
+      // On failure: fall through to startGame (which surfaces an error card if needed).
+    }
+  }
+  startGame();
+}
+function changeMarket(market) {
+  if (!MARKETS[market]) return;
+  currentMarket = market;
+  localStorage.setItem(MARKET_KEY, market);
   updateHeaderAndFooter();
   startGame();
 }
@@ -480,10 +647,10 @@ function seededRandom(seed) {
   };
 }
 
-// ── Local state ───────────────────────────────────────────────────────────
+// ── Local state (per market) ──────────────────────────────────────────────
 function loadState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(getStorageKey());
     if (!raw) return null;
     const state = JSON.parse(raw);
     if (state.date !== todayKey) return null;   // old day
@@ -492,16 +659,16 @@ function loadState() {
 }
 
 function saveState(data) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ date: todayKey, ...data })); }
+  try { localStorage.setItem(getStorageKey(), JSON.stringify({ date: todayKey, ...data })); }
   catch {}
 }
 
-// ── Fetch product van lokale scraper-server ────────────────────────────────
+// ── Fetch product from local scraper server ───────────────────────────────
 async function fetchProduct(dateKey) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 55000);
   try {
-    const resp = await fetch(`/api/product?date=${dateKey}&lang=${currentLang}`, { signal: controller.signal });
+    const resp = await fetch(`/api/product?date=${dateKey}&market=${currentMarket}&lang=${currentLang}`, { signal: controller.signal });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `Server fout ${resp.status}`);
@@ -535,7 +702,7 @@ function buildGameUI(restoredGuesses) {
       <div class="product-header">
         <div class="product-img-wrap">${imgContent}</div>
         <div class="product-info">
-          <div class="product-category">${product.category}</div>
+          <div class="product-category">${getCategoryLabel(product)}</div>
           <div class="product-name">${product.name}</div>
           <div class="product-desc">${product.description}</div>
           <div class="price-mystery">
@@ -837,6 +1004,7 @@ function hideError()  { const e=document.getElementById('error-msg'); if(e) e.st
 // ── Start ─────────────────────────────────────────────────────────────────
 async function startGame() {
   document.getElementById('lang-select').value = currentLang;
+  document.getElementById('market-select').value = currentMarket;
   updateHeaderAndFooter();
   todayKey = getTodayKey();
   document.getElementById('header-date').textContent = `📅 ${formatDate(todayKey)}`;
