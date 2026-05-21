@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Aldidle – Raad de prijs!</title>
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<meta name="theme-color" content="#003087">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=DM+Sans:wght@400;600;700;900&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -250,6 +254,40 @@
     color:rgba(255,255,255,.3); font-size:.7rem;
     text-align:center; padding:.85rem 1rem; margin-top:auto;
   }
+
+  /* ── Birthday easter egg (shown only on a `special` product day) ───────── */
+  .birthday-banner {
+    background: linear-gradient(135deg, var(--blue), var(--dark-blue));
+    color:#fff; border-radius:14px;
+    padding:.85rem 1rem; margin-bottom:1.1rem;
+    text-align:center; box-shadow:0 6px 22px rgba(0,48,135,.32);
+    animation: birthday-pop .45s ease-out both;
+  }
+  .birthday-title { font-family:'Anton',sans-serif; font-size:1.2rem; letter-spacing:.5px; }
+  .birthday-text  { font-size:.85rem; margin-top:.15rem; opacity:.92; }
+  @keyframes birthday-pop {
+    from { transform:scale(.85); opacity:0; }
+    to   { transform:scale(1);   opacity:1; }
+  }
+  .confetti-layer {
+    position:fixed; inset:0; z-index:9999;
+    pointer-events:none; overflow:hidden;
+  }
+  .confetti-piece {
+    position:absolute; top:-14px;
+    width:9px; height:15px; border-radius:2px;
+    will-change:transform;
+  }
+  .confetti-piece.spin-r { animation:confetti-fall-r linear forwards; }
+  .confetti-piece.spin-l { animation:confetti-fall-l linear forwards; }
+  @keyframes confetti-fall-r {
+    0%   { transform:translateY(-14px) rotate(0deg); }
+    100% { transform:translateY(105vh) rotate(720deg); }
+  }
+  @keyframes confetti-fall-l {
+    0%   { transform:translateY(-14px) rotate(0deg); }
+    100% { transform:translateY(105vh) rotate(-720deg); }
+  }
 </style>
 </head>
 <body>
@@ -401,6 +439,8 @@ const translations = {
     'voer-geldige-prijs': 'Voer een geldige prijs in.',
     'country-be': 'België',
     'country-de': 'Duitsland',
+    'verjaardag-titel': '🎂 Aldidle bestaat 1 week!',
+    'verjaardag-tekst': 'Bedankt dat je meespeelt — proost op week 2! 🥂',
     'footer': 'Aldidle is een fan-project &nbsp;·&nbsp; Niet gelieerd aan Aldi',
   },
   fr: {
@@ -441,6 +481,8 @@ const translations = {
     'voer-geldige-prijs': 'Entrez un prix valide.',
     'country-be': 'Belgique',
     'country-de': 'Allemagne',
+    'verjaardag-titel': '🎂 Aldidle a 1 semaine !',
+    'verjaardag-tekst': 'Merci de jouer — à la semaine 2 ! 🥂',
     'footer': 'Aldidle est un projet fan &nbsp;·&nbsp; Non affilié à Aldi',
   },
   de: {
@@ -481,6 +523,8 @@ const translations = {
     'voer-geldige-prijs': 'Geben Sie einen gültigen Preis ein.',
     'country-be': 'Belgien',
     'country-de': 'Deutschland',
+    'verjaardag-titel': '🎂 Aldidle wird 1 Woche alt!',
+    'verjaardag-tekst': 'Danke fürs Mitspielen — auf Woche 2! 🥂',
     'footer': 'Aldidle ist ein Fan-Projekt &nbsp;·&nbsp; Nicht mit Aldi verbunden',
   },
 };
@@ -877,13 +921,44 @@ function buildShareText(won) {
   return `Aldidle #${getDayNumber()} — ${formatDate(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ ${t('geraden-in')} ${guesses.length}/${MAX_GUESSES}`:`❌ ${t('verloren-title')}`}\nhttps://aldidle.daiza.be`;
 }
 
+// ── Birthday easter egg ───────────────────────────────────────────────────
+// A product carries special:'birthday' only on the day the server pins it,
+// so these only ever fire on that single date.
+function isBirthday(p) { return !!(p && p.special === 'birthday'); }
+
+function birthdayBannerHTML() {
+  return `<div class="birthday-banner">
+      <div class="birthday-title">${t('verjaardag-titel')}</div>
+      <div class="birthday-text">${t('verjaardag-tekst')}</div>
+    </div>`;
+}
+
+function launchConfetti() {
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const colors = ['#003087', '#E2001A', '#FFD400', '#ffffff'];
+  const layer  = document.createElement('div');
+  layer.className = 'confetti-layer';
+  for (let i = 0; i < 90; i++) {
+    const piece = document.createElement('span');
+    piece.className = 'confetti-piece ' + (i % 2 ? 'spin-l' : 'spin-r');
+    piece.style.left = (Math.random() * 100).toFixed(2) + 'vw';
+    piece.style.background = colors[i % colors.length];
+    piece.style.animationDelay = (Math.random() * 0.7).toFixed(2) + 's';
+    piece.style.animationDuration = (2.6 + Math.random() * 1.8).toFixed(2) + 's';
+    layer.appendChild(piece);
+  }
+  document.body.appendChild(layer);
+  setTimeout(() => layer.remove(), 6000);
+}
+
 function showResult(won) {
   const sec = document.getElementById('input-section');
   if (sec) sec.style.display = 'none';
 
+  const party = won && isBirthday(product);
   const div = document.createElement('div');
   div.id = 'result-screen';
-  div.innerHTML = won
+  div.innerHTML = (party ? birthdayBannerHTML() : '') + (won
     ? `<div class="result-emoji">${t('gewonnen')}</div>
        <div class="result-title win">${t('gewonnen-title')}</div>
        <div class="result-price-reveal">${t('prijs-was')} <span class="real-price">€${product.price.toFixed(2)}</span></div>
@@ -891,7 +966,7 @@ function showResult(won) {
     : `<div class="result-emoji">${t('verloren')}</div>
        <div class="result-title lose">${t('verloren-title')}</div>
        <div class="result-price-reveal">${t('echte-prijs')} <span class="real-price">€${product.price.toFixed(2)}</span></div>
-       <p style="color:#6b7280;font-size:.82rem;margin-bottom:1.25rem">${t('morgen-kans')}</p>`;
+       <p style="color:#6b7280;font-size:.82rem;margin-bottom:1.25rem">${t('morgen-kans')}</p>`);
 
   // Share button
   const shareText = buildShareText(won);
@@ -927,6 +1002,7 @@ function showResult(won) {
   div.appendChild(countdownWrap);
   document.getElementById('product-card').appendChild(div);
 
+  if (party) launchConfetti();
   startCountdown();
 }
 
@@ -944,9 +1020,12 @@ function showAlreadyPlayed(state) {
     return `Aldidle #${getDayNumber()} — ${formatDate(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ ${t('geraden-in')} ${state.guesses.length}/${MAX_GUESSES}`:`❌ ${t('verloren-title')}`}\nhttps://aldidle.be`;
   })();
 
+  const party = won && isBirthday(state.product);
+
   app.innerHTML = `
     <div class="card">
       <div class="already-played">
+        ${party ? birthdayBannerHTML() : ''}
         <div class="big-icon">${won ? '🏆' : '😔'}</div>
         <h2>${t('al-gespeeld')}</h2>
         <p>
@@ -977,6 +1056,7 @@ function showAlreadyPlayed(state) {
     } catch {}
   };
 
+  if (party) launchConfetti();
   startCountdown();
 }
 

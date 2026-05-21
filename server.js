@@ -364,12 +364,66 @@ async function warmupPool(marketId, scrapeLang) {
   console.log(`Warmed up (${market.id}/${lang}): ${cache[poolKey].length} products ready`);
 }
 
+// ── Special pinned products ──────────────────────────────────────────────────
+// On landmark dates, override the deterministic pick with a hand-picked product.
+// The `special` tag travels to the frontend, which shows a matching easter egg.
+// An entry exists for exactly one date, so the easter egg is shown only that day.
+const SPECIAL_PRODUCTS = {
+  // 2026-05-22 — Aldidle turns one week old. A bottle of bubbly to toast with.
+  '2026-05-22': {
+    special: 'birthday',
+    categoryKey: 'wine',
+    emoji: '🍾',
+    byLang: {
+      nl: { name: 'VEUVE DURAND® Champagne brut',  url: 'https://www.aldi.be/nl/p/champagne-brut-1225-1-0.article.html' },
+      fr: { name: 'VEUVE DURAND® Champagne brut',  url: 'https://www.aldi.be/fr/p/champagne-brut-1225-1-0.article.html' },
+      de: { name: 'VEUVE DURAND® Champagner brut', url: 'https://www.aldi.be/de/p/champagner-brut-1225-1-0.article.html' },
+    },
+    // Snapshot — used only if the live scrape fails on the day itself.
+    snapshot: {
+      price: 17.99,
+      description: '75 cl',
+      imageUrl: 'https://www.aldi.be/content/aldi/belgium/promotions/source-localenhancement/2019/2019-01/2019-01-02/vast_assortiment/1225/1/0/_jcr_content/assets/imported-images/BILD_INTERNET1/1225_champagne_brut.png/_jcr_content/renditions/original.transform/288w/img.260521.png',
+    },
+  },
+};
+
+// Resolve a special product for a date/lang, or null. Scrapes live first so
+// price/image stay current; falls back to the snapshot if scraping fails.
+async function getSpecialProduct(dateKey, lang) {
+  const special = SPECIAL_PRODUCTS[dateKey];
+  if (!special) return null;
+  const sLang = special.byLang[lang] ? lang : 'nl';
+  const loc   = special.byLang[sLang];
+  try {
+    const live = await scrapeProduct(loc.url, getMarket('be'), sLang);
+    if (live.name && live.price > 0) {
+      return { ...live, categoryKey: special.categoryKey, emoji: special.emoji, special: special.special };
+    }
+  } catch (e) {
+    console.log(`Special product scrape failed (${dateKey}/${sLang}), using snapshot: ${e.message}`);
+  }
+  return {
+    name: loc.name,
+    productUrl: loc.url,
+    categoryKey: special.categoryKey,
+    emoji: special.emoji,
+    special: special.special,
+    ...special.snapshot,
+  };
+}
+
 // ── Product of the day ───────────────────────────────────────────────────────
 async function getProductOfDay(dateKey, marketId, requestedLang) {
   if (warmupPromise) await warmupPromise.catch(() => {});
 
   const market   = getMarket(marketId);
   const lang     = resolveScrapeLang(market, requestedLang || market.defaultScrapeLang);
+
+  // Landmark dates short-circuit the deterministic pick (and the cache).
+  const special = await getSpecialProduct(dateKey, lang);
+  if (special) return special;
+
   const cache    = loadCache();
   const cacheKey = `${market.id}:${lang}:${dateKey}`;
   if (cache[cacheKey]) {
