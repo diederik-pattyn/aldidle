@@ -6,7 +6,10 @@ const path    = require('path');
 
 const app        = express();
 const PORT       = process.env.PORT || 3000;
-const CACHE_FILE = path.join(__dirname, '.product-cache.json');
+// CACHE_DIR lets the cache live on a persistent volume (e.g. a Railway volume)
+// so the "product of the day" survives restarts. Defaults to the app dir.
+const CACHE_DIR  = process.env.CACHE_DIR || __dirname;
+const CACHE_FILE = path.join(CACHE_DIR, '.product-cache.json');
 
 // ── Markets registry ─────────────────────────────────────────────────────────
 // Add a new market by adding one entry. Fields:
