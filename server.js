@@ -10,6 +10,7 @@ const PORT       = process.env.PORT || 3000;
 // so the "product of the day" survives restarts. Defaults to the app dir.
 const CACHE_DIR  = process.env.CACHE_DIR || __dirname;
 const CACHE_FILE = path.join(CACHE_DIR, '.product-cache.json');
+const ANALYTICS_FILE = path.join(CACHE_DIR, 'analytics.jsonl');
 
 // ── Markets registry ─────────────────────────────────────────────────────────
 // Add a new market by adding one entry. Fields:
@@ -499,8 +500,53 @@ async function getProductOfDay(dateKey, marketId, requestedLang) {
   return product;
 }
 
+// ── Analytics ────────────────────────────────────────────────────────────────
+// Append-only JSONL log; one event per line. Stays on the same persistent
+// volume as the product cache so it survives restarts.
+const ALLOWED_EVENTS = new Set(['visit', 'guess', 'finish']);
+
+function recordEvent(evt) {
+  try {
+    fs.appendFileSync(ANALYTICS_FILE, JSON.stringify(evt) + '\n');
+  } catch (e) {
+    console.log('analytics write failed:', e.message);
+  }
+}
+
+function readEvents() {
+  if (!fs.existsSync(ANALYTICS_FILE)) return [];
+  const out = [];
+  for (const line of fs.readFileSync(ANALYTICS_FILE, 'utf8').split('\n')) {
+    if (!line) continue;
+    try { out.push(JSON.parse(line)); } catch {}
+  }
+  return out;
+}
+
+function aggregateStats(events) {
+  const byDay = {};
+  let visits = 0, guesses = 0, finishes = 0, wins = 0, winAttemptsSum = 0;
+  const marketCounts = {}, langCounts = {};
+  for (const e of events) {
+    const day = (e.t || '').slice(0, 10);
+    if (!byDay[day]) byDay[day] = { visits: 0, guesses: 0, finishes: 0, wins: 0, winAttemptsSum: 0 };
+    if (e.type === 'visit')  { visits++;   byDay[day].visits++; }
+    if (e.type === 'guess')  { guesses++;  byDay[day].guesses++; }
+    if (e.type === 'finish') {
+      finishes++; byDay[day].finishes++;
+      if (e.won) { wins++; byDay[day].wins++;
+        if (typeof e.attempts === 'number') { winAttemptsSum += e.attempts; byDay[day].winAttemptsSum += e.attempts; }
+      }
+    }
+    if (e.market) marketCounts[e.market] = (marketCounts[e.market] || 0) + 1;
+    if (e.lang)   langCounts[e.lang]     = (langCounts[e.lang]     || 0) + 1;
+  }
+  return { visits, guesses, finishes, wins, winAttemptsSum, byDay, marketCounts, langCounts };
+}
+
 // ── Express ───────────────────────────────────────────────────────────────────
 app.use((_, res, next) => { res.header('Access-Control-Allow-Origin', '*'); next(); });
+app.use(express.json({ limit: '2kb' }));
 
 app.get('/api/markets', (_, res) => {
   res.json(Object.keys(MARKETS).map(id => ({
@@ -521,6 +567,83 @@ app.get('/api/product', async (req, res) => {
     console.error('Error:', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+app.post('/api/event', (req, res) => {
+  const b = req.body || {};
+  if (!ALLOWED_EVENTS.has(b.type)) return res.status(400).json({ error: 'bad type' });
+  const evt = { t: new Date().toISOString(), type: b.type };
+  if (typeof b.market === 'string' && b.market.length < 32) evt.market = b.market;
+  if (typeof b.lang   === 'string' && b.lang.length   < 8)  evt.lang   = b.lang;
+  if (b.type === 'finish') {
+    if (Number.isInteger(b.attempts) && b.attempts >= 1 && b.attempts <= 20) evt.attempts = b.attempts;
+    evt.won = !!b.won;
+  }
+  recordEvent(evt);
+  res.json({ ok: true });
+});
+
+app.get('/stats', (req, res) => {
+  const token = process.env.STATS_TOKEN;
+  if (token && req.query.token !== token) return res.status(404).send('Not found');
+  const s = aggregateStats(readEvents());
+  const avgWinAttempts = s.wins ? (s.winAttemptsSum / s.wins).toFixed(2) : '—';
+  const winRate        = s.finishes ? ((s.wins / s.finishes) * 100).toFixed(1) + '%' : '—';
+  const days = Object.keys(s.byDay).sort().reverse().slice(0, 30);
+  const rows = days.map(d => {
+    const r = s.byDay[d];
+    const avg = r.wins ? (r.winAttemptsSum / r.wins).toFixed(2) : '—';
+    const wr  = r.finishes ? ((r.wins / r.finishes) * 100).toFixed(0) + '%' : '—';
+    return `<tr><td>${d || '(unknown)'}</td><td>${r.visits}</td><td>${r.guesses}</td><td>${r.finishes}</td><td>${r.wins}</td><td>${wr}</td><td>${avg}</td></tr>`;
+  }).join('');
+  const marketRows = Object.entries(s.marketCounts).sort((a,b)=>b[1]-a[1])
+    .map(([m,n]) => `<tr><td>${m}</td><td>${n}</td></tr>`).join('');
+  const langRows = Object.entries(s.langCounts).sort((a,b)=>b[1]-a[1])
+    .map(([l,n]) => `<tr><td>${l}</td><td>${n}</td></tr>`).join('');
+  res.type('html').send(`<!doctype html>
+<html><head><meta charset="utf-8"><title>Aldidle stats</title>
+<style>
+  body{font-family:-apple-system,system-ui,sans-serif;max-width:880px;margin:2rem auto;padding:0 1rem;color:#1f2937}
+  h1{margin:0 0 .25rem;font-size:1.6rem}
+  .sub{color:#6b7280;margin-bottom:1.5rem;font-size:.9rem}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.75rem;margin-bottom:2rem}
+  .kpi{background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:.85rem 1rem}
+  .kpi .label{color:#6b7280;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}
+  .kpi .value{font-size:1.5rem;font-weight:700;margin-top:.25rem}
+  table{width:100%;border-collapse:collapse;margin-bottom:2rem;font-size:.9rem}
+  th,td{padding:.5rem .75rem;border-bottom:1px solid #e5e7eb;text-align:left}
+  th{background:#f9fafb;font-weight:600;color:#4b5563}
+  td:not(:first-child),th:not(:first-child){text-align:right}
+  h2{font-size:1.05rem;margin:1.5rem 0 .5rem;color:#374151}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+  @media(max-width:600px){.two{grid-template-columns:1fr}}
+</style></head>
+<body>
+  <h1>Aldidle stats</h1>
+  <div class="sub">Visits are deduped per browser per day. Finishes count won + lost games.</div>
+  <div class="grid">
+    <div class="kpi"><div class="label">Visits</div><div class="value">${s.visits}</div></div>
+    <div class="kpi"><div class="label">Guesses</div><div class="value">${s.guesses}</div></div>
+    <div class="kpi"><div class="label">Finishes</div><div class="value">${s.finishes}</div></div>
+    <div class="kpi"><div class="label">Win rate</div><div class="value">${winRate}</div></div>
+    <div class="kpi"><div class="label">Avg attempts (wins)</div><div class="value">${avgWinAttempts}</div></div>
+  </div>
+  <h2>Last 30 days</h2>
+  <table>
+    <thead><tr><th>Day</th><th>Visits</th><th>Guesses</th><th>Finishes</th><th>Wins</th><th>Win %</th><th>Avg att.</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="7" style="text-align:center;color:#9ca3af">No data yet</td></tr>'}</tbody>
+  </table>
+  <div class="two">
+    <div>
+      <h2>By market</h2>
+      <table><thead><tr><th>Market</th><th>Events</th></tr></thead><tbody>${marketRows || '<tr><td colspan="2" style="color:#9ca3af">—</td></tr>'}</tbody></table>
+    </div>
+    <div>
+      <h2>By language</h2>
+      <table><thead><tr><th>Lang</th><th>Events</th></tr></thead><tbody>${langRows || '<tr><td colspan="2" style="color:#9ca3af">—</td></tr>'}</tbody></table>
+    </div>
+  </div>
+</body></html>`);
 });
 
 app.use(express.static(__dirname));

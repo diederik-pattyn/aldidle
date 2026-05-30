@@ -646,6 +646,29 @@ let guesses  = [];
 let gameOver = false;
 let todayKey = '';   // e.g. "2026-05-15"
 
+// ── Analytics ─────────────────────────────────────────────────────────────
+// Fire-and-forget POST to /api/event. Wrapped so a server hiccup never
+// disrupts the game. Uses sendBeacon when available so 'finish' events
+// survive a page close.
+function track(type, data) {
+  const body = JSON.stringify({ type, market: currentMarket, lang: currentLang, ...(data || {}) });
+  try {
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon('/api/event', new Blob([body], { type: 'application/json' }));
+    } else {
+      fetch('/api/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(()=>{});
+    }
+  } catch {}
+}
+
+// Once per browser per UTC day; refreshes don't inflate.
+function trackVisitOnce() {
+  const key = 'aldidle-visit-' + new Date().toISOString().slice(0,10);
+  if (localStorage.getItem(key)) return;
+  localStorage.setItem(key, '1');
+  track('visit');
+}
+
 // ── Date helpers ──────────────────────────────────────────────────────────
 function getTodayKey() {
   const d = new Date();
@@ -873,6 +896,7 @@ function submitGuess() {
 
   const idx = guesses.length;
   guesses.push(val);
+  track('guess');
 
   const dot = document.getElementById(`dot-${idx}`);
   dot.classList.remove('current');
@@ -900,11 +924,13 @@ function submitGuess() {
   if (type === 'correct') {
     gameOver = true;
     saveState({ product, guesses, done: true, won: true });
+    track('finish', { attempts: guesses.length, won: true });
     setTimeout(() => showResult(true), 700);
   } else if (guesses.length >= MAX_GUESSES) {
     gameOver = true;
     document.getElementById('guess-btn').disabled = true;
     saveState({ product, guesses, done: true, won: false });
+    track('finish', { attempts: guesses.length, won: false });
     setTimeout(() => showResult(false), 700);
   }
 }
@@ -1142,6 +1168,7 @@ async function startGame() {
   }
 }
 
+trackVisitOnce();
 startGame();
 </script>
 </body>
