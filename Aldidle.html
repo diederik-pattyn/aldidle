@@ -387,6 +387,22 @@ const MARKETS = {
     },
     confetti: ['#001D85', '#D33641', '#8fa8e0', '#ffffff'],
   },
+  'ikea-be': {
+    country: 'be', variant: null, brand: 'IKEA', logo: 'IKEA',
+    shareName: 'Ikeadle',
+    flag: '🇧🇪', siteLangs: ['nl', 'fr'],
+    // IKEA brand colours: blue #0058A3 + yellow #FFDB00 (no red — yellow can't
+    // be a text/button colour, so reds map to a readable dark blue).
+    theme: {
+      '--blue':      '#0058A3',   // IKEA blue — header & primary
+      '--red':       '#003E72',   // dark blue — accent / CTA (readable, was red)
+      '--stripe':    '#FFDB00',   // IKEA yellow stripe under the header
+      '--accent':    '#FFF3B0',   // pale yellow — currency-symbol background
+      '--accent-fg': '#0058A3',
+      '--too-high':  '#e8730c',   // orange "too high" hint instead of red
+    },
+    confetti: ['#0058A3', '#FFDB00', '#ffffff', '#4a90d9'],
+  },
 };
 const DEFAULT_MARKET = currentStore.defaultMarket;
 let currentMarket = localStorage.getItem(MARKET_KEY) || DEFAULT_MARKET;
@@ -852,8 +868,8 @@ function replayGuess(val) {
 
   let type, icon, hint;
   if (val >= low && val <= high)    { type='correct';  icon='✓'; hint=t('raak'); }
-  else if (val < low)               { type='too-low';  icon='↑'; hint=val<product.price*.5?t('veel-te-laag'):t('te-laag'); }
-  else                              { type='too-high'; icon='↓'; hint=val>product.price*1.5?t('veel-te-hoog'):t('te-hoog'); }
+  else if (val < low)               { type='too-low';  icon='↑'; hint=val<=product.price*.5?t('veel-te-laag'):t('te-laag'); }
+  else                              { type='too-high'; icon='↓'; hint=val>=product.price*2?t('veel-te-hoog'):t('te-hoog'); }
 
   const dot = document.getElementById(`dot-${idx}`);
   if (dot) {
@@ -898,8 +914,8 @@ function submitGuess() {
 
   let type, icon, hint;
   if (val >= low && val <= high)    { type='correct';  icon='✓'; hint=t('raak'); }
-  else if (val < low)               { type='too-low';  icon='↑'; hint=val<product.price*.5?t('veel-te-laag'):t('te-laag'); }
-  else                              { type='too-high'; icon='↓'; hint=val>product.price*1.5?t('veel-te-hoog'):t('te-hoog'); }
+  else if (val < low)               { type='too-low';  icon='↑'; hint=val<=product.price*.5?t('veel-te-laag'):t('te-laag'); }
+  else                              { type='too-high'; icon='↓'; hint=val>=product.price*2?t('veel-te-hoog'):t('te-hoog'); }
 
   const idx = guesses.length;
   guesses.push(val);

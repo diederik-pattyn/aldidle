@@ -28,6 +28,11 @@
       markets: ['hubo-be'], defaultMarket: 'hubo-be',
       color: '#001D85', accent: '#D33641',
     },
+    ikea: {
+      slug: 'ikea', name: 'IKEA', logo: 'IKEA',
+      markets: ['ikea-be'], defaultMarket: 'ikea-be',
+      color: '#0058A3', accent: '#FFDB00',
+    },
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = { STORES };

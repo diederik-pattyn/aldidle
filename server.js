@@ -95,6 +95,28 @@ const MARKETS = {
     // /nl/p/…-geel/103059/ ↔ /fr/p/…-jaune/103059/
     crossLangIdRegex: /\/(\d+)\/?$/,
   },
+  'ikea-be': {
+    id: 'ikea-be',
+    baseUrl: 'https://www.ikea.com',
+    siteLanguages: ['nl', 'fr'],
+    defaultScrapeLang: 'nl',
+    acceptLanguage: {
+      nl: 'nl-BE,nl;q=0.9',
+      fr: 'fr-BE,fr;q=0.9',
+    },
+    poolStrategy: 'sitemap-index',
+    productStrategy: 'ikea',
+    // Master sitemap lists per-country product sub-sitemaps; keep only
+    // prod-<lang>-BE_*. One sub (~7000 products) overlaps 1:1 across languages,
+    // since IKEA product names lead the slug and are language-independent.
+    sitemapPath: '/sitemaps/sitemap.xml',
+    sitemapSubFilter: 'prod-{lang}-BE_',
+    productPathFilter: '/be/{lang}/p/',
+    sitemapLimit: 1,
+    // Cross-lang: nl and fr share the trailing id, which may carry an 's' prefix
+    // for combination products: /be/nl/p/…-50598681/ or …-s09122851/.
+    crossLangIdRegex: /-(s?\d+)\/?$/,
+  },
 };
 
 const DEFAULT_MARKET = 'be';
@@ -178,9 +200,10 @@ const POOL_STRATEGIES = {
     return [...urls];
   },
 
-  // Nested sitemap: an index lists sub-sitemaps, each listing product URLs (Hubo).
-  // Bounded by market.sitemapLimit so warmup stays cheap. Both languages live in
-  // the same sub-sitemaps, so we filter to the requested language by URL path.
+  // Nested sitemap: an index lists sub-sitemaps, each listing product URLs (Hubo, IKEA).
+  // Bounded by market.sitemapLimit so warmup stays cheap. market.sitemapSubFilter (with
+  // {lang}) narrows a multi-country index to the right sub-sitemaps; productPathFilter
+  // then keeps only the requested language's product URLs.
   async 'sitemap-index'(market, scrapeLang) {
     const indexUrl = market.baseUrl + market.sitemapPath;
     const filter   = market.productPathFilter.replace('{lang}', scrapeLang);
@@ -189,14 +212,19 @@ const POOL_STRATEGIES = {
       headers: buildHeaders(market, scrapeLang, 'application/xml,text/xml,*/*'),
       timeout: 20000,
     });
-    const subs = [...idxResp.data.matchAll(/<loc>(https?:\/\/[^<]+)<\/loc>/g)].map(m => m[1]);
+    let subs = [...idxResp.data.matchAll(/<loc>(https?:\/\/[^<]+)<\/loc>/g)].map(m => m[1]);
+    if (market.sitemapSubFilter) {
+      const subFilter = market.sitemapSubFilter.replace('{lang}', scrapeLang);
+      subs = subs.filter(u => u.includes(subFilter));
+    }
     const limit = market.sitemapLimit || subs.length;
     const urls = new Set();
     for (const sub of subs.slice(0, limit)) {
       try {
+        // Product sitemaps can be large (IKEA ~50MB decompressed) — allow more time.
         const r = await httpGet(sub, {
           headers: buildHeaders(market, scrapeLang, 'application/xml,text/xml,*/*'),
-          timeout: 20000,
+          timeout: 60000,
         });
         for (const m of r.data.matchAll(/<loc>(https?:\/\/[^<]+)<\/loc>/g)) {
           if (m[1].includes(filter)) urls.add(m[1]);
@@ -353,6 +381,31 @@ const PRODUCT_STRATEGIES = {
     if (pm) price = parseFloat(pm[1]);
     const imageUrl = $('meta[property="og:image"]').attr('content') || '';
     const desc = cleanText($('meta[name="description"]').attr('content') || '');
+    return { name, price, imageUrl, description: desc };
+  },
+
+  // IKEA: og:title is "NAME descriptor, variant, size"; price in "price":X.XX.
+  ikea(html, $, url, market) {
+    let full = cleanText($('meta[property="og:title"]').attr('content') || $('title').text() || '');
+    full = full.replace(/\s*-\s*IKEA.*$/i, '').trim();
+    // The (language-independent) product name is the leading run of all-caps words;
+    // the descriptor is the rest (e.g. "ZAMIOCULCAS" + "plant, …, 17 cm").
+    let name = full, desc = '';
+    const words = full.split(' ');
+    let i = 0;
+    while (i < words.length && words[i] && !/\p{Ll}/u.test(words[i])) i++;
+    if (i > 0 && i < words.length) {
+      name = words.slice(0, i).join(' ');
+      desc = words.slice(i).join(' ').replace(/,\s*\.\s*,/g, ',').trim();
+    }
+    // Combination products list "price":0 placeholders before the real price —
+    // take the first non-zero value.
+    let price = 0;
+    for (const pm of html.matchAll(/"price":\s*"?(\d+(?:[.,]\d+)?)"?/g)) {
+      const v = parseFloat(pm[1].replace(',', '.'));
+      if (v > 0) { price = v; break; }
+    }
+    const imageUrl = $('meta[property="og:image"]').attr('content') || '';
     return { name, price, imageUrl, description: desc };
   },
 };
