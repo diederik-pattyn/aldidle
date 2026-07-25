@@ -26,7 +26,7 @@
     hubo: {
       slug: 'hubo', name: 'Hubo', logo: 'HUBO',
       markets: ['hubo-be'], defaultMarket: 'hubo-be',
-      color: '#5f9b23', accent: '#3f6b1f',
+      color: '#001D85', accent: '#D33641',
     },
   };
 

@@ -376,16 +376,16 @@ const MARKETS = {
     country: 'be', variant: null, brand: 'Hubo', logo: 'HUBO',
     shareName: 'Hubodle',
     flag: '🇧🇪', siteLangs: ['nl', 'fr'],
-    // Hubo brand colour: green. No red in the identity — mirror the AH approach.
+    // Hubo brand colours (from the logo): deep blue #001D85 + red #D33641.
     theme: {
-      '--blue':      '#5f9b23',   // green — header & primary
-      '--red':       '#3f6b1f',   // brand accent / CTA (was Aldi red)
-      '--stripe':    '#3f6b1f',
-      '--accent':    '#e6f2d8',
-      '--accent-fg': '#3f6b1f',
-      '--too-high':  '#e8730c',   // orange "too high" hint instead of red
+      '--blue':      '#001D85',   // deep blue — header & primary
+      '--red':       '#D33641',   // Hubo red — accent / CTA
+      '--stripe':    '#D33641',
+      '--accent':    '#d6def2',
+      '--accent-fg': '#001D85',
+      '--too-high':  '#D33641',
     },
-    confetti: ['#5f9b23', '#3f6b1f', '#c3e39a', '#ffffff'],
+    confetti: ['#001D85', '#D33641', '#8fa8e0', '#ffffff'],
   },
 };
 const DEFAULT_MARKET = currentStore.defaultMarket;
