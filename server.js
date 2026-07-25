@@ -64,6 +64,17 @@ const MARKETS = {
     sitemapPath: '/sitemap.xml',
     productPathFilter: '/produkt/',
   },
+  'ah-be': {
+    id: 'ah-be',
+    baseUrl: 'https://www.ah.be',
+    siteLanguages: ['nl'],
+    defaultScrapeLang: 'nl',
+    acceptLanguage: { nl: 'nl-BE,nl;q=0.9' },
+    poolStrategy: 'sitemap',
+    productStrategy: 'ahbe',
+    sitemapPath: '/sitemaps/entities/products/detail.xml',
+    productPathFilter: '/producten/product/',
+  },
 };
 
 const DEFAULT_MARKET = 'be';
@@ -239,6 +250,31 @@ const PRODUCT_STRATEGIES = {
         .replace(/\s*zum günstigen ALDI Preis\s*\.?\s*$/i, '')
         .trim();
     }
+    return { name, price, imageUrl, description: desc };
+  },
+
+  // Albert Heijn BE: a JSON-LD Product block carries name, price, image and weight.
+  ahbe(html, $, url, market) {
+    let name = '', price = 0, imageUrl = '', desc = '';
+    $('script[type="application/ld+json"]').each((_, el) => {
+      if (name && price) return false;
+      let data;
+      try { data = JSON.parse($(el).contents().text() || $(el).text()); } catch { return; }
+      for (const node of (Array.isArray(data) ? data : [data])) {
+        if (!node || node['@type'] !== 'Product') continue;
+        name = cleanText(node.name || name);
+        const offer = Array.isArray(node.offers) ? node.offers[0] : node.offers;
+        if (offer && offer.price != null) price = parseFloat(String(offer.price).replace(',', '.'));
+        if (node.image) imageUrl = node.image;
+        if (node.weight && node.weight.value) desc = cleanText(node.weight.value);
+      }
+    });
+    // AH page titles carry a " reserveren | Albert Heijn" suffix — strip it.
+    name = name.replace(/\s*\|\s*Albert Heijn\s*$/i, '').replace(/\s+reserveren\s*$/i, '').trim();
+    // Prefer the og:image (entities-decoded by cheerio); bump to a crisper rendition.
+    const og = $('meta[property="og:image"]').attr('content');
+    if (og) imageUrl = og;
+    if (imageUrl) imageUrl = imageUrl.replace(/rendition=\d+x\d+_/, 'rendition=400x400_');
     return { name, price, imageUrl, description: desc };
   },
 };

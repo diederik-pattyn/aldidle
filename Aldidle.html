@@ -60,7 +60,7 @@
 
   .header-right { text-align:right; }
   .header-right h1 { font-family:'Anton',sans-serif; font-size:clamp(1.4rem,5vw,2.1rem); color:var(--white); letter-spacing:1px; line-height:1; }
-  .header-right h1 span { color:#E2001A; }
+  .header-right h1 span { color:var(--red); }
   .header-right .date-pill {
     display:inline-flex; align-items:center; gap:5px;
     background:rgba(255,255,255,.12);
@@ -150,7 +150,7 @@
     50%      { box-shadow:0 0 0 5px rgba(0,48,135,0); }
   }
   .attempt-dot.used-correct { background:var(--correct); border-color:var(--correct); color:white; }
-  .attempt-dot.used-high    { background:var(--red);     border-color:var(--red);     color:white; }
+  .attempt-dot.used-high    { background:var(--too-high); border-color:var(--too-high); color:white; }
   .attempt-dot.used-low     { background:var(--too-low); border-color:var(--too-low); color:white; }
 
   #progress-bar-wrap { height:4px; background:#e5e7eb; border-radius:2px; margin-bottom:1.25rem; overflow:hidden; }
@@ -336,10 +336,12 @@ const MARKET_KEY = 'aldidle_market';
 //   variant   : optional subdivision name (e.g. 'Nord', 'Süd'); null = no variant
 //   flag      : country emoji
 //   siteLangs : languages the site offers products in (UI lang falls back to these)
+//   brand     : optional — store brand for non-Aldi markets (defaults to 'Aldi')
+//   logo      : optional — text shown in the big header logo (defaults to 'ALDI')
 //   theme     : optional — overrides for CSS variables (--blue, --red, --stripe, --accent, …)
 const MARKETS = {
-  'be':      { country: 'be', variant: null,   flag: '🇧🇪', siteLangs: ['nl','fr','de'], theme: null },
-  'de-nord': { country: 'de', variant: 'Nord', flag: '🇩🇪', siteLangs: ['de'],            theme: null },
+  'be':      { country: 'be', variant: null,   flag: '🇧🇪', siteLangs: ['nl','fr'], theme: null },
+  'de-nord': { country: 'de', variant: 'Nord', flag: '🇩🇪', siteLangs: ['de'],       theme: null },
   'de-sued': {
     country: 'de', variant: 'Süd', flag: '🇩🇪', siteLangs: ['de'],
     theme: {
@@ -348,6 +350,21 @@ const MARKETS = {
       '--accent':    '#FCE300',
       '--accent-fg': '#003087',
     },
+  },
+  'ah-be': {
+    country: 'be', variant: null, brand: 'Albert Heijn', logo: 'AH',
+    flag: '🇧🇪', siteLangs: ['nl'],
+    // Albert Heijn has no red in its identity — replace every red with an
+    // azure/navy accent, and use orange (not red) for the "too high" signal.
+    theme: {
+      '--blue':      '#0091d4',   // azure — header & primary
+      '--red':       '#003a70',   // brand accent / CTA (was Aldi red)
+      '--stripe':    '#003a70',
+      '--accent':    '#d4eefb',
+      '--accent-fg': '#0091d4',
+      '--too-high':  '#e8730c',   // orange "too high" hint instead of red
+    },
+    confetti: ['#0091d4', '#003a70', '#7fc9ee', '#ffffff'],
   },
 };
 const DEFAULT_MARKET = 'be';
@@ -540,7 +557,10 @@ function getMarketSubtitle() {
 function getMarketLabel(id) {
   const m = MARKETS[id];
   const country = t(`country-${m.country}`);
-  return m.variant ? `${m.flag} Aldi ${m.variant}` : `${m.flag} ${country}`;
+  const brand = m.brand || 'Aldi';
+  if (m.variant) return `${m.flag} ${brand} ${m.variant}`;
+  if (m.brand)   return `${m.flag} ${m.brand}`;
+  return `${m.flag} ${country}`;
 }
 function populateMarketSelect() {
   const sel = document.getElementById('market-select');
@@ -573,6 +593,7 @@ const THEME_DEFAULTS = {
   '--stripe':    '#E2001A',
   '--accent':    '#d6e4f7',
   '--accent-fg': '#003087',
+  '--too-high':  '#dc2626',
 };
 function applyTheme() {
   const overrides = (MARKETS[currentMarket].theme) || {};
@@ -587,6 +608,7 @@ function updateHeaderAndFooter() {
   // so it must run before any t()-based text rendering below.
   populateLangSelect();
   applyTheme();
+  document.querySelector('.logo-aldi').textContent = MARKETS[currentMarket].logo || 'ALDI';
   document.querySelector('.logo-sub').textContent = getMarketSubtitle();
   const full = t('raad-de-prijs');
   const lastSpace = full.lastIndexOf(' ');
@@ -960,7 +982,7 @@ function birthdayBannerHTML() {
 
 function launchConfetti() {
   if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const colors = ['#003087', '#E2001A', '#FFD400', '#ffffff'];
+  const colors = (MARKETS[currentMarket].confetti) || ['#003087', '#E2001A', '#FFD400', '#ffffff'];
   const layer  = document.createElement('div');
   layer.className = 'confetti-layer';
   for (let i = 0; i < 90; i++) {
