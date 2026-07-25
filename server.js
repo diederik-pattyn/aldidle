@@ -1,8 +1,8 @@
 const express = require('express');
-const axios   = require('axios');
 const cheerio = require('cheerio');
 const fs      = require('fs');
 const path    = require('path');
+const { STORES } = require('./assets/stores.js');
 
 const app        = express();
 const PORT       = process.env.PORT || 3000;
@@ -75,6 +75,26 @@ const MARKETS = {
     sitemapPath: '/sitemaps/entities/products/detail.xml',
     productPathFilter: '/producten/product/',
   },
+  'hubo-be': {
+    id: 'hubo-be',
+    baseUrl: 'https://www.hubo.be',
+    siteLanguages: ['nl', 'fr'],
+    defaultScrapeLang: 'nl',
+    acceptLanguage: {
+      nl: 'nl-BE,nl;q=0.9',
+      fr: 'fr-BE,fr;q=0.9',
+    },
+    poolStrategy: 'sitemap-index',
+    productStrategy: 'hubo',
+    // Nested sitemap: an index points to ~257 sub-sitemaps (1000 urls each).
+    // We only pull the first few for a varied-enough daily pool (see sitemapLimit).
+    sitemapPath: '/sitemap/product-sitemap-index.xml',
+    productPathFilter: '/{lang}/p/',
+    sitemapLimit: 4,
+    // Cross-lang: nl and fr share the trailing numeric id:
+    // /nl/p/…-geel/103059/ ↔ /fr/p/…-jaune/103059/
+    crossLangIdRegex: /\/(\d+)\/?$/,
+  },
 };
 
 const DEFAULT_MARKET = 'be';
@@ -98,6 +118,21 @@ function buildHeaders(market, scrapeLang, accept) {
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Minimal axios-compatible GET backed by Node's native fetch (undici). undici's
+// TLS fingerprint gets past Cloudflare on some stores (e.g. Hubo) where axios is
+// blocked with a 403. It also auto-decompresses, so we drop Accept-Encoding and
+// let it manage that. Returns { data, status } so callers can use resp.data.
+async function httpGet(url, { headers = {}, timeout = 15000 } = {}) {
+  const { ['Accept-Encoding']: _drop, ...h } = headers;
+  const res = await fetch(url, { headers: h, redirect: 'follow', signal: AbortSignal.timeout(timeout) });
+  if (!res.ok) {
+    const e = new Error(`Request failed with status code ${res.status}`);
+    e.status = res.status;
+    throw e;
+  }
+  return { data: await res.text(), status: res.status };
+}
 
 // ── Seed helpers ─────────────────────────────────────────────────────────────
 // dateToSeed: stable integer hash from a string (must match the frontend).
@@ -132,7 +167,7 @@ const POOL_STRATEGIES = {
       .replace('{lang}', scrapeLang);
     const filter    = market.productPathFilter ? market.productPathFilter.replace('{lang}', scrapeLang) : '';
     console.log(`Fetching sitemap (${market.id}/${scrapeLang}): ${sitemapUrl}`);
-    const resp = await axios.get(sitemapUrl, {
+    const resp = await httpGet(sitemapUrl, {
       headers: buildHeaders(market, scrapeLang, 'application/xml,text/xml,*/*'),
       timeout: 20000,
     });
@@ -143,10 +178,41 @@ const POOL_STRATEGIES = {
     return [...urls];
   },
 
+  // Nested sitemap: an index lists sub-sitemaps, each listing product URLs (Hubo).
+  // Bounded by market.sitemapLimit so warmup stays cheap. Both languages live in
+  // the same sub-sitemaps, so we filter to the requested language by URL path.
+  async 'sitemap-index'(market, scrapeLang) {
+    const indexUrl = market.baseUrl + market.sitemapPath;
+    const filter   = market.productPathFilter.replace('{lang}', scrapeLang);
+    console.log(`Fetching sitemap index (${market.id}/${scrapeLang}): ${indexUrl}`);
+    const idxResp  = await httpGet(indexUrl, {
+      headers: buildHeaders(market, scrapeLang, 'application/xml,text/xml,*/*'),
+      timeout: 20000,
+    });
+    const subs = [...idxResp.data.matchAll(/<loc>(https?:\/\/[^<]+)<\/loc>/g)].map(m => m[1]);
+    const limit = market.sitemapLimit || subs.length;
+    const urls = new Set();
+    for (const sub of subs.slice(0, limit)) {
+      try {
+        const r = await httpGet(sub, {
+          headers: buildHeaders(market, scrapeLang, 'application/xml,text/xml,*/*'),
+          timeout: 20000,
+        });
+        for (const m of r.data.matchAll(/<loc>(https?:\/\/[^<]+)<\/loc>/g)) {
+          if (m[1].includes(filter)) urls.add(m[1]);
+        }
+      } catch (e) {
+        console.log(`  skipped sub-sitemap (${sub}): ${e.message}`);
+      }
+      await sleep(120);
+    }
+    return [...urls];
+  },
+
   // Sitemap only lists brand pages; products are embedded within each brand page (Süd)
   async 'sued-brands'(market, scrapeLang) {
     const sitemapUrl = market.baseUrl + market.sitemapPath;
-    const resp = await axios.get(sitemapUrl, {
+    const resp = await httpGet(sitemapUrl, {
       headers: buildHeaders(market, scrapeLang, 'application/xml,text/xml,*/*'),
       timeout: 20000,
     });
@@ -159,7 +225,7 @@ const POOL_STRATEGIES = {
     const products = new Set();
     for (const brandUrl of brandUrls) {
       try {
-        const r = await axios.get(brandUrl, { headers: buildHeaders(market, scrapeLang), timeout: 12000 });
+        const r = await httpGet(brandUrl, { headers: buildHeaders(market, scrapeLang), timeout: 12000 });
         for (const m of r.data.matchAll(/\/produkt\/[a-z0-9-]+/g)) {
           products.add(market.baseUrl + m[0]);
         }
@@ -277,62 +343,34 @@ const PRODUCT_STRATEGIES = {
     if (imageUrl) imageUrl = imageUrl.replace(/rendition=\d+x\d+_/, 'rendition=400x400_');
     return { name, price, imageUrl, description: desc };
   },
+
+  // Hubo (DIY): name in <title>, price embedded as "offers":{"price":"X.XX"}.
+  hubo(html, $, url, market) {
+    let name = cleanText($('title').text() || $('meta[property="og:title"]').attr('content') || '');
+    name = name.replace(/\s*\|\s*Hubo\s*$/i, '').trim();
+    let price = 0;
+    const pm = html.match(/"offers":\s*\{\s*"price":\s*"([\d.]+)"/);
+    if (pm) price = parseFloat(pm[1]);
+    const imageUrl = $('meta[property="og:image"]').attr('content') || '';
+    const desc = cleanText($('meta[name="description"]').attr('content') || '');
+    return { name, price, imageUrl, description: desc };
+  },
 };
 
 async function scrapeProduct(url, market, scrapeLang) {
-  const resp = await axios.get(url, { headers: buildHeaders(market, scrapeLang), timeout: 12000 });
+  const resp = await httpGet(url, { headers: buildHeaders(market, scrapeLang), timeout: 12000 });
   const html = resp.data;
   const $    = cheerio.load(html);
   const fn   = PRODUCT_STRATEGIES[market.productStrategy];
   if (!fn) throw new Error(`Unknown product strategy: ${market.productStrategy}`);
   const raw  = fn(html, $, url, market);
-  const { key, emoji } = guessCategory(raw.name, url);
   return {
     name: raw.name,
     price: raw.price,
     imageUrl: raw.imageUrl,
-    categoryKey: key,
     description: raw.description,
     productUrl: url,
-    emoji,
   };
-}
-
-// Stable English keys; the frontend translates them to the active UI language.
-function guessCategory(name, url) {
-  const s = (name + ' ' + url).toLowerCase();
-  if (/vis|inktvis|calamari|zalm|kabeljauw|garnaal|tonijn|makreel|zeevruchten|fisch|lachs|thunfisch/.test(s)) return { key: 'fish',          emoji: '🐟' };
-  if (/kip|gevogelte|kalkoen|poulet|hähn|huhn|pute/.test(s))                                                  return { key: 'poultry',       emoji: '🍗' };
-  if (/vlees|varken|rund|ham|salami|charcuterie|gehakt|worst|steak|spek|fleisch|schwein|wurst/.test(s))       return { key: 'meat',          emoji: '🥩' };
-  if (/kaas|käse/.test(s))                                                                                    return { key: 'cheese',        emoji: '🧀' };
-  if (/melk|yoghurt|boter|room|kwark|milch|butter|sahne|quark/.test(s))                                       return { key: 'dairy',         emoji: '🥛' };
-  if (/eier|ei\./.test(s))                                                                                    return { key: 'eggs',          emoji: '🥚' };
-  if (/brood|baguette|croissant|pistolet|wrap|pita|brot|brötchen/.test(s))                                    return { key: 'bakery',        emoji: '🥖' };
-  if (/appel|peer|banaan|sinaasappel|aardbei|druif|mango|fruit|apfel|birne|erdbeer/.test(s))                  return { key: 'fruit',         emoji: '🍎' };
-  if (/groente|sla|tomaat|komkommer|wortel|paprika|ui|prei|broccoli|spinazie|gemüse|salat|tomate|gurke|möhre|zwiebel/.test(s)) return { key: 'vegetables', emoji: '🥦' };
-  if (/aardappel|kartoffel/.test(s))                                                                          return { key: 'vegetables',    emoji: '🥔' };
-  if (/pasta|spaghetti|penne|fusilli|lasagne|nudel/.test(s))                                                  return { key: 'pasta',         emoji: '🍝' };
-  if (/rijst|noedel|couscous|quinoa|reis/.test(s))                                                            return { key: 'grains',        emoji: '🍚' };
-  if (/saus|ketchup|mayo|mosterd|dressing|pesto|soße|senf/.test(s))                                           return { key: 'sauces',        emoji: '🫙' };
-  if (/olijfolie|zonnebloemolie|olie|öl/.test(s))                                                             return { key: 'oils',          emoji: '🫒' };
-  if (/soep|suppe/.test(s))                                                                                   return { key: 'soup',          emoji: '🍲' };
-  if (/bier/.test(s))                                                                                         return { key: 'beer',          emoji: '🍺' };
-  if (/wijn|prosecco|cava|wein/.test(s))                                                                      return { key: 'wine',          emoji: '🍷' };
-  if (/bronwater|mineraalwater|bruisend water|water|wasser/.test(s))                                          return { key: 'water',         emoji: '💧' };
-  if (/frisdrank|cola|fanta|sprite|limonade|sap|juice|saft/.test(s))                                          return { key: 'drinks',        emoji: '🥤' };
-  if (/koffie|espresso|kaffee/.test(s))                                                                       return { key: 'coffee',        emoji: '☕' };
-  if (/thee|tee/.test(s))                                                                                     return { key: 'tea',           emoji: '🍵' };
-  if (/chocolade|schokolade/.test(s))                                                                         return { key: 'chocolate',     emoji: '🍫' };
-  if (/koek|biscuit|wafel|keks|waffel/.test(s))                                                               return { key: 'cookies',       emoji: '🍪' };
-  if (/chips|popcorn|pretzels|brezel/.test(s))                                                                return { key: 'snacks',        emoji: '🥨' };
-  if (/snoep|gummy|drop|süßigkeit|gummibär/.test(s))                                                          return { key: 'candy',         emoji: '🍬' };
-  if (/noten|amandelen|cashew|pistache|nuss|mandel/.test(s))                                                  return { key: 'nuts',          emoji: '🥜' };
-  if (/jam|confituur|honing|siroop|honig|marmelade/.test(s))                                                  return { key: 'spread',        emoji: '🍯' };
-  if (/diepvries|frozen|tiefkühl/.test(s))                                                                    return { key: 'frozen',        emoji: '❄️' };
-  if (/tortilla|tapas|serrano|hummus/.test(s))                                                                return { key: 'international', emoji: '🌍' };
-  if (/shampoo|douchegel|zeep|tandpasta|seife|zahnpasta/.test(s))                                             return { key: 'care',          emoji: '🧴' };
-  if (/wasmiddel|afwasmiddel|schoonmaakmiddel|waschmittel|spülmittel/.test(s))                                return { key: 'cleaning',      emoji: '🧹' };
-  return { key: 'default', emoji: '🛒' };
 }
 
 // ── Cache ─────────────────────────────────────────────────────────────────────
@@ -416,8 +454,6 @@ const SPECIAL_PRODUCTS = {
   // 2026-05-22 — Aldidle turns one week old. A bottle of bubbly to toast with.
   '2026-05-22': {
     special: 'birthday',
-    categoryKey: 'wine',
-    emoji: '🍾',
     byLang: {
       nl: { name: 'VEUVE DURAND® Champagne brut',  url: 'https://www.aldi.be/nl/p/champagne-brut-1225-1-0.article.html' },
       fr: { name: 'VEUVE DURAND® Champagne brut',  url: 'https://www.aldi.be/fr/p/champagne-brut-1225-1-0.article.html' },
@@ -442,7 +478,7 @@ async function getSpecialProduct(dateKey, lang) {
   try {
     const live = await scrapeProduct(loc.url, getMarket('be'), sLang);
     if (live.name && live.price > 0) {
-      return { ...live, categoryKey: special.categoryKey, emoji: special.emoji, special: special.special };
+      return { ...live, special: special.special };
     }
   } catch (e) {
     console.log(`Special product scrape failed (${dateKey}/${sLang}), using snapshot: ${e.message}`);
@@ -450,8 +486,6 @@ async function getSpecialProduct(dateKey, lang) {
   return {
     name: loc.name,
     productUrl: loc.url,
-    categoryKey: special.categoryKey,
-    emoji: special.emoji,
     special: special.special,
     ...special.snapshot,
   };
@@ -470,19 +504,7 @@ async function getProductOfDay(dateKey, marketId, requestedLang) {
 
   const cache    = loadCache();
   const cacheKey = `${market.id}:${lang}:${dateKey}`;
-  if (cache[cacheKey]) {
-    let cached = cache[cacheKey];
-    // Migrate legacy cache entries that predate categoryKey: re-derive from name/URL.
-    if (!cached.categoryKey) {
-      const { key, emoji } = guessCategory(cached.name || '', cached.productUrl || '');
-      cached = { ...cached, categoryKey: key, emoji: cached.emoji || emoji };
-      delete cached.category;
-      const fresh = loadCache();
-      fresh[cacheKey] = cached;
-      saveCache(fresh);
-    }
-    return cached;
-  }
+  if (cache[cacheKey]) return cache[cacheKey];
 
   const rng = seededRandom(dateToSeed(`${market.id}:${dateKey}`));
   let product = null;
@@ -691,7 +713,18 @@ app.get('/stats', (req, res) => {
 });
 
 app.use(express.static(__dirname));
-app.get('/', (_, res) => res.sendFile(path.join(__dirname, 'Aldidle.html')));
+
+// Landing page: pick a store.
+app.get('/', (_, res) => res.sendFile(path.join(__dirname, 'landing.html')));
+
+// Per-store game page (/aldi, /albertheijn, …). The game reads its store from
+// the URL path. Unknown slugs bounce back to the landing page.
+app.get('/:store', (req, res) => {
+  if (Object.prototype.hasOwnProperty.call(STORES, req.params.store)) {
+    return res.sendFile(path.join(__dirname, 'Aldidle.html'));
+  }
+  res.redirect('/');
+});
 
 // Exported for tests / manual use.
 module.exports = { MARKETS, getMarket, fetchProductPool, scrapeProduct, resolveScrapeLang };

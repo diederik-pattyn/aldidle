@@ -119,11 +119,6 @@
   }
 
   .product-info { flex:1; min-width:0; }
-  .product-category {
-    display:inline-block; background:var(--light-blue); color:var(--blue);
-    font-size:.67rem; font-weight:700; text-transform:uppercase; letter-spacing:1.2px;
-    padding:3px 10px; border-radius:20px; margin-bottom:.5rem;
-  }
   .product-name { font-size:1.15rem; font-weight:900; color:var(--text); line-height:1.3; margin-bottom:.35rem; }
   .product-desc { font-size:.78rem; color:#6b7280; line-height:1.5; }
   .price-mystery { display:flex; align-items:center; gap:8px; margin-top:.75rem; }
@@ -321,14 +316,23 @@
   </div>
 </div>
 
-<footer>Aldidl is een fan-project &nbsp;·&nbsp; Niet gelieerd aan Aldi NV</footer>
+<footer>Winkle is een fan-project</footer>
 
+<script src="/assets/stores.js"></script>
 <script>
 const MAX_GUESSES = 6;
 const MARGIN = 3.5 / 100;
 const STORAGE_KEY_PREFIX = 'aldidle_daily';
 const LANG_KEY = 'aldidle_lang';
-const MARKET_KEY = 'aldidle_market';
+
+// ── Store (from the URL) ──────────────────────────────────────────────────────
+// The page is served at /<store-slug>; figure out which store we're playing so
+// the market list, header and share links can all scope to it. An unknown slug
+// bounces to the landing page.
+const STORE_SLUG   = (location.pathname.replace(/^\/+/, '').split('/')[0] || '').toLowerCase();
+const currentStore = (typeof STORES !== 'undefined' && STORES[STORE_SLUG]) || null;
+if (!currentStore) { location.replace('/'); throw new Error('Unknown store: ' + STORE_SLUG); }
+const MARKET_KEY = 'aldidle_market:' + STORE_SLUG;   // remember the market per store
 
 // ── Markets registry ──────────────────────────────────────────────────────────
 // Add a new market by adding one entry here. Keep in sync with server.js.
@@ -338,6 +342,7 @@ const MARKET_KEY = 'aldidle_market';
 //   siteLangs : languages the site offers products in (UI lang falls back to these)
 //   brand     : optional — store brand for non-Aldi markets (defaults to 'Aldi')
 //   logo      : optional — text shown in the big header logo (defaults to 'ALDI')
+//   shareName : optional — title used in the share-score text (defaults to 'Aldidle')
 //   theme     : optional — overrides for CSS variables (--blue, --red, --stripe, --accent, …)
 const MARKETS = {
   'be':      { country: 'be', variant: null,   flag: '🇧🇪', siteLangs: ['nl','fr'], theme: null },
@@ -353,6 +358,7 @@ const MARKETS = {
   },
   'ah-be': {
     country: 'be', variant: null, brand: 'Albert Heijn', logo: 'AH',
+    shareName: 'Albert Heijndle',
     flag: '🇧🇪', siteLangs: ['nl'],
     // Albert Heijn has no red in its identity — replace every red with an
     // azure/navy accent, and use orange (not red) for the "too high" signal.
@@ -366,54 +372,28 @@ const MARKETS = {
     },
     confetti: ['#0091d4', '#003a70', '#7fc9ee', '#ffffff'],
   },
+  'hubo-be': {
+    country: 'be', variant: null, brand: 'Hubo', logo: 'HUBO',
+    shareName: 'Hubodle',
+    flag: '🇧🇪', siteLangs: ['nl', 'fr'],
+    // Hubo brand colour: green. No red in the identity — mirror the AH approach.
+    theme: {
+      '--blue':      '#5f9b23',   // green — header & primary
+      '--red':       '#3f6b1f',   // brand accent / CTA (was Aldi red)
+      '--stripe':    '#3f6b1f',
+      '--accent':    '#e6f2d8',
+      '--accent-fg': '#3f6b1f',
+      '--too-high':  '#e8730c',   // orange "too high" hint instead of red
+    },
+    confetti: ['#5f9b23', '#3f6b1f', '#c3e39a', '#ffffff'],
+  },
 };
-const DEFAULT_MARKET = 'be';
+const DEFAULT_MARKET = currentStore.defaultMarket;
 let currentMarket = localStorage.getItem(MARKET_KEY) || DEFAULT_MARKET;
-if (!MARKETS[currentMarket]) currentMarket = DEFAULT_MARKET;
+// Only markets that belong to the current store are valid here.
+if (!currentStore.markets.includes(currentMarket)) currentMarket = DEFAULT_MARKET;
 
 function getStorageKey() { return `${STORAGE_KEY_PREFIX}:${currentMarket}`; }
-
-// ── Product categories ────────────────────────────────────────────────────────
-// Stable keys come from the server; the UI translates them to the active language.
-const CATEGORIES = {
-  fish:          { nl: 'Vis & zeevruchten',  fr: 'Poisson & fruits de mer', de: 'Fisch & Meeresfrüchte' },
-  poultry:       { nl: 'Gevogelte',          fr: 'Volaille',                de: 'Geflügel'              },
-  meat:          { nl: 'Vlees',              fr: 'Viande',                  de: 'Fleisch'               },
-  cheese:        { nl: 'Kaas',               fr: 'Fromage',                 de: 'Käse'                  },
-  dairy:         { nl: 'Zuivel',             fr: 'Produits laitiers',       de: 'Milchprodukte'         },
-  eggs:          { nl: 'Eieren',             fr: 'Œufs',                    de: 'Eier'                  },
-  bakery:        { nl: 'Bakkerij',           fr: 'Boulangerie',             de: 'Bäckerei'              },
-  fruit:         { nl: 'Fruit',              fr: 'Fruits',                  de: 'Obst'                  },
-  vegetables:    { nl: 'Groenten',           fr: 'Légumes',                 de: 'Gemüse'                },
-  pasta:         { nl: 'Pasta',              fr: 'Pâtes',                   de: 'Pasta'                 },
-  grains:        { nl: 'Granen & rijst',     fr: 'Céréales & riz',          de: 'Getreide & Reis'       },
-  sauces:        { nl: 'Sauzen',             fr: 'Sauces',                  de: 'Saucen'                },
-  oils:          { nl: 'Oliën',              fr: 'Huiles',                  de: 'Öle'                   },
-  soup:          { nl: 'Soep',               fr: 'Soupe',                   de: 'Suppe'                 },
-  beer:          { nl: 'Bier',               fr: 'Bière',                   de: 'Bier'                  },
-  wine:          { nl: 'Wijn',               fr: 'Vin',                     de: 'Wein'                  },
-  water:         { nl: 'Water',              fr: 'Eau',                     de: 'Wasser'                },
-  drinks:        { nl: 'Dranken',            fr: 'Boissons',                de: 'Getränke'              },
-  coffee:        { nl: 'Koffie',             fr: 'Café',                    de: 'Kaffee'                },
-  tea:           { nl: 'Thee',               fr: 'Thé',                     de: 'Tee'                   },
-  chocolate:     { nl: 'Chocolade',          fr: 'Chocolat',                de: 'Schokolade'            },
-  cookies:       { nl: 'Koekjes',            fr: 'Biscuits',                de: 'Kekse'                 },
-  snacks:        { nl: 'Chips & snacks',     fr: 'Chips & snacks',          de: 'Chips & Snacks'        },
-  candy:         { nl: 'Snoep',              fr: 'Bonbons',                 de: 'Süßigkeiten'           },
-  nuts:          { nl: 'Noten',              fr: 'Noix',                    de: 'Nüsse'                 },
-  spread:        { nl: 'Beleg',              fr: 'Tartines',                de: 'Aufstrich'             },
-  frozen:        { nl: 'Diepvries',          fr: 'Surgelés',                de: 'Tiefkühl'              },
-  international: { nl: 'Internationaal',     fr: 'International',           de: 'International'         },
-  care:          { nl: 'Verzorging',         fr: 'Soins',                   de: 'Pflege'                },
-  cleaning:      { nl: 'Schoonmaak',         fr: 'Entretien',               de: 'Reinigung'             },
-  default:       { nl: 'Aanbieding',         fr: 'Promo',                   de: 'Angebot'               },
-};
-function getCategoryLabel(p) {
-  const c = CATEGORIES[p && p.categoryKey];
-  if (c) return c[currentLang] || c.nl;
-  // Fallback for older cached products that still carry the literal `category` field.
-  return (p && p.category) || '';
-}
 
 // ── Translations ──────────────────────────────────────────────────────────────
 const translations = {
@@ -428,6 +408,7 @@ const translations = {
     'server-opwarmt': 'Server wordt opgewarmd, even geduld…',
     'raad': 'RAAD DE PRIJS',
     'deel-resultaat': '📤 DEEL JE RESULTAAT',
+    'ander-spel': 'ANDERE WINKEL',
     'gekopieerd': '✓ Gekopieerd naar klembord!',
     'te-laag': 'Te laag',
     'te-hoog': 'Te hoog',
@@ -457,7 +438,7 @@ const translations = {
     'country-de': 'Duitsland',
     'verjaardag-titel': '🎂 Aldidle bestaat 1 week!',
     'verjaardag-tekst': 'Bedankt dat je meespeelt — proost op week 2! 🥂',
-    'footer': 'Aldidle is een fan-project &nbsp;·&nbsp; Niet gelieerd aan Aldi',
+    'footer': 'Winkle is een fan-project &nbsp;·&nbsp; niet verbonden met {store}',
   },
   fr: {
     'raad-de-prijs': 'DEVINEZ LE PRIX',
@@ -470,6 +451,7 @@ const translations = {
     'server-opwarmt': 'Le serveur chauffe, veuillez patienter…',
     'raad': 'DEVINEZ LE PRIX',
     'deel-resultaat': '📤 PARTAGER VOTRE RÉSULTAT',
+    'ander-spel': 'AUTRE MAGASIN',
     'gekopieerd': '✓ Copié dans le presse-papiers!',
     'te-laag': 'Trop bas',
     'te-hoog': 'Trop haut',
@@ -499,7 +481,7 @@ const translations = {
     'country-de': 'Allemagne',
     'verjaardag-titel': '🎂 Aldidle a 1 semaine !',
     'verjaardag-tekst': 'Merci de jouer — à la semaine 2 ! 🥂',
-    'footer': 'Aldidle est un projet fan &nbsp;·&nbsp; Non affilié à Aldi',
+    'footer': 'Winkle est un projet fan &nbsp;·&nbsp; non affilié à {store}',
   },
   de: {
     'raad-de-prijs': 'PREIS ERRATEN',
@@ -512,6 +494,7 @@ const translations = {
     'server-opwarmt': 'Server wird aufgewärmt, bitte warten…',
     'raad': 'PREIS ERRATEN',
     'deel-resultaat': '📤 ERGEBNIS TEILEN',
+    'ander-spel': 'ANDERER LADEN',
     'gekopieerd': '✓ In Zwischenablage kopiert!',
     'te-laag': 'Zu niedrig',
     'te-hoog': 'Zu hoch',
@@ -541,7 +524,7 @@ const translations = {
     'country-de': 'Deutschland',
     'verjaardag-titel': '🎂 Aldidle wird 1 Woche alt!',
     'verjaardag-tekst': 'Danke fürs Mitspielen — auf Woche 2! 🥂',
-    'footer': 'Aldidle ist ein Fan-Projekt &nbsp;·&nbsp; Nicht mit Aldi verbunden',
+    'footer': 'Winkle ist ein Fan-Projekt &nbsp;·&nbsp; nicht mit {store} verbunden',
   },
 };
 
@@ -564,10 +547,12 @@ function getMarketLabel(id) {
 }
 function populateMarketSelect() {
   const sel = document.getElementById('market-select');
-  sel.innerHTML = Object.keys(MARKETS).map(id =>
+  sel.innerHTML = currentStore.markets.map(id =>
     `<option value="${id}">${getMarketLabel(id)}</option>`
   ).join('');
   sel.value = currentMarket;
+  // A store with a single market needs no picker.
+  sel.style.display = currentStore.markets.length > 1 ? '' : 'none';
 }
 
 // Restrict the language selector to languages the current market actually offers
@@ -584,6 +569,8 @@ function populateLangSelect() {
     `<option value="${l}">${l.toUpperCase()}</option>`
   ).join('');
   sel.value = currentLang;
+  // Hide the picker when the store offers a single language.
+  sel.style.display = allowed.length > 1 ? '' : 'none';
 }
 
 // Defaults to fall back to when a market doesn't supply theme overrides.
@@ -616,7 +603,8 @@ function updateHeaderAndFooter() {
   const highlight  = lastSpace >= 0 ? full.slice(lastSpace + 1) : '';
   document.querySelector('.header-right h1').innerHTML =
     highlight ? `${main} <span>${highlight}</span>` : `<span>${main}</span>`;
-  document.querySelector('footer').innerHTML = t('footer');
+  document.querySelector('footer').innerHTML = t('footer').replace('{store}', currentStore.name);
+  document.title = `Winkle · ${currentStore.name}`;
   populateMarketSelect();
 }
 async function changeLang(lang) {
@@ -626,8 +614,7 @@ async function changeLang(lang) {
   updateHeaderAndFooter();
 
   // Re-fetch the product on every language change, keeping existing guesses. For
-  // multilang markets this translates the name + description; for single-lang
-  // markets it ensures the latest server-side schema (e.g. categoryKey) is used.
+  // multilang markets this translates the name + description.
   const state = loadState();
   if (state && state.product) {
     document.getElementById('app').innerHTML = `
@@ -655,7 +642,7 @@ async function changeLang(lang) {
   startGame();
 }
 function changeMarket(market) {
-  if (!MARKETS[market]) return;
+  if (!currentStore.markets.includes(market)) return;
   currentMarket = market;
   localStorage.setItem(MARKET_KEY, market);
   updateHeaderAndFooter();
@@ -781,8 +768,8 @@ function buildGameUI(restoredGuesses) {
   const imgContent = hasImg
     ? `<img src="${product.imageUrl}" alt="${product.name}"
             onerror="this.style.display='none';document.getElementById('${safeId}').style.display='flex'">
-       <span id="${safeId}" class="emoji-fb" style="display:none">${product.emoji||'🛒'}</span>`
-    : `<span class="emoji-fb">${product.emoji||'🛒'}</span>`;
+       <span id="${safeId}" class="emoji-fb" style="display:none">🛒</span>`
+    : `<span class="emoji-fb">🛒</span>`;
 
   app.innerHTML = `
     <div class="card" id="product-card">
@@ -790,7 +777,6 @@ function buildGameUI(restoredGuesses) {
       <div class="product-header">
         <div class="product-img-wrap">${imgContent}</div>
         <div class="product-info">
-          <div class="product-category">${getCategoryLabel(product)}</div>
           <div class="product-name">${product.name}</div>
           <div class="product-desc">${product.description}</div>
           <div class="price-mystery">
@@ -957,6 +943,9 @@ function submitGuess() {
 }
 
 // ── Result + share ────────────────────────────────────────────────────────
+// Every share links straight to the store you played.
+function shareUrl() { return 'https://winkle.daiza.be/' + currentStore.slug; }
+
 function buildShareText(won) {
   const icons = guesses.map(v => {
     const m = product.price * MARGIN;
@@ -965,7 +954,8 @@ function buildShareText(won) {
   });
   const remaining = MAX_GUESSES - guesses.length;
   const empties   = Array(remaining).fill('⬜');
-  return `Aldidle #${getDayNumber()} — ${formatDate(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ ${t('geraden-in')} ${guesses.length}/${MAX_GUESSES}`:`❌ ${t('verloren-title')}`}\nhttps://aldidle.daiza.be`;
+  const shareName = MARKETS[currentMarket].shareName || 'Aldidle';
+  return `${shareName} #${getDayNumber()} — ${formatDate(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ ${t('geraden-in')} ${guesses.length}/${MAX_GUESSES}`:`❌ ${t('verloren-title')}`}\n${shareUrl()}`;
 }
 
 // ── Birthday easter egg ───────────────────────────────────────────────────
@@ -1044,9 +1034,17 @@ function showResult(won) {
     <div id="countdown">--:--:--</div>
   `;
 
+  // Back to the landing page to pick another store to play.
+  const againBtn = document.createElement('button');
+  againBtn.className   = 'play-again-btn';
+  againBtn.style.marginTop = '1rem';
+  againBtn.textContent = t('ander-spel');
+  againBtn.onclick     = () => { location.href = '/'; };
+
   div.appendChild(shareBtn);
   div.appendChild(copiedMsg);
   div.appendChild(countdownWrap);
+  div.appendChild(againBtn);
   document.getElementById('product-card').appendChild(div);
 
   if (party) launchConfetti();
@@ -1064,7 +1062,8 @@ function showAlreadyPlayed(state) {
       return v < state.product.price ? '🟦' : '🟥';
     });
     const empties = Array(MAX_GUESSES - state.guesses.length).fill('⬜');
-    return `Aldidle #${getDayNumber()} — ${formatDate(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ ${t('geraden-in')} ${state.guesses.length}/${MAX_GUESSES}`:`❌ ${t('verloren-title')}`}\nhttps://aldidle.be`;
+    const shareName = MARKETS[currentMarket].shareName || 'Aldidle';
+    return `${shareName} #${getDayNumber()} — ${formatDate(todayKey)}\n${[...icons,...empties].join('')}\n${won?`✅ ${t('geraden-in')} ${state.guesses.length}/${MAX_GUESSES}`:`❌ ${t('verloren-title')}`}\n${shareUrl()}`;
   })();
 
   const party = won && isBirthday(state.product);
@@ -1086,6 +1085,7 @@ function showAlreadyPlayed(state) {
         </div>
         <button class="share-btn" id="share-again-btn">${t('deel-resultaat')}</button>
         <div id="share-copied" class="share-copied">${t('gekopieerd')}</div>
+        <button class="play-again-btn" style="margin-top:1rem" onclick="location.href='/'">${t('ander-spel')}</button>
       </div>
     </div>
   `;
