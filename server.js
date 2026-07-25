@@ -26,20 +26,21 @@ const MARKETS = {
   'be': {
     id: 'be',
     baseUrl: 'https://www.aldi.be',
-    siteLanguages: ['nl', 'fr', 'de'],
+    siteLanguages: ['nl', 'fr'],
     defaultScrapeLang: 'nl',
     acceptLanguage: {
       nl: 'nl-BE,nl;q=0.9',
       fr: 'fr-BE,fr;q=0.9',
-      de: 'de-BE,de;q=0.9',
     },
     poolStrategy: 'sitemap',
-    productStrategy: 'be',
-    sitemapPath: '/{lang}/.aldi-nord-sitemap-pages.xml',
-    productPathFilter: '/{lang}/p/',
-    // Cross-lang: the same product ID appears in all three sitemaps,
-    // only the slug differs: /nl/p/bronwater-320-1-0 ↔ /fr/p/eau-de-source-320-1-0
-    crossLangIdRegex: /-(\d+(?:-\d+)*)\.article\.html$/,
+    productStrategy: 'nord',
+    // aldi.be runs on the Aldi-Nord platform. The nl products sitemap lives at
+    // the site root; other languages are served under a /{lang} prefix.
+    sitemapPath: '{langPrefix}/sitemaps/.aldi-nord-sitemap-products.xml',
+    productPathFilter: '/product/',
+    // Cross-lang: the same product ID ends every URL, only the slug differs:
+    // /product/popcorn-9870.html ↔ /fr/product/pop-corn-9870.html
+    crossLangIdRegex: /-(\d+)\.html$/,
   },
   'de-nord': {
     id: 'de-nord',
@@ -112,15 +113,21 @@ function getTodayKey() {
 const POOL_STRATEGIES = {
   // Simple sitemap that lists product URLs directly (BE, Nord)
   async sitemap(market, scrapeLang) {
-    const sitemapUrl = market.baseUrl + market.sitemapPath.replace('{lang}', scrapeLang);
-    const filter    = market.productPathFilter.replace('{lang}', scrapeLang);
+    // {langPrefix}: empty for the default language (served at the site root),
+    // "/<lang>" for the others. {lang} kept for any legacy per-lang paths.
+    const langPrefix = scrapeLang === market.defaultScrapeLang ? '' : `/${scrapeLang}`;
+    const sitemapUrl = market.baseUrl + market.sitemapPath
+      .replace('{langPrefix}', langPrefix)
+      .replace('{lang}', scrapeLang);
+    const filter    = market.productPathFilter ? market.productPathFilter.replace('{lang}', scrapeLang) : '';
+    console.log(`Fetching sitemap (${market.id}/${scrapeLang}): ${sitemapUrl}`);
     const resp = await axios.get(sitemapUrl, {
       headers: buildHeaders(market, scrapeLang, 'application/xml,text/xml,*/*'),
       timeout: 20000,
     });
     const urls = new Set();
     for (const m of resp.data.matchAll(/<loc>(https?:\/\/[^<]+)<\/loc>/g)) {
-      if (m[1].includes(filter)) urls.add(m[1]);
+      if (!filter || m[1].includes(filter)) urls.add(m[1]);
     }
     return [...urls];
   },
@@ -585,6 +592,7 @@ app.post('/api/event', (req, res) => {
 
 app.get('/stats', (req, res) => {
   const token = process.env.STATS_TOKEN;
+  console.log(`[stats] STATS_TOKEN ${token ? `set (len=${token.length})` : 'NOT set'}; query token ${req.query.token ? `provided (len=${String(req.query.token).length})` : 'absent'}; match=${!!token && req.query.token === token}`);
   if (token && req.query.token !== token) return res.status(404).send('Not found');
   const s = aggregateStats(readEvents());
   const avgWinAttempts = s.wins ? (s.winAttemptsSum / s.wins).toFixed(2) : '—';
