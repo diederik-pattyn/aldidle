@@ -1,0 +1,15 @@
+body{font-family:-apple-system,system-ui,sans-serif;max-width:880px;margin:2rem auto;padding:0 1rem;color:#1f2937}
+h1{margin:0 0 .25rem;font-size:1.6rem}
+.sub{color:#6b7280;margin-bottom:1.5rem;font-size:.9rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.75rem;margin-bottom:2rem}
+.kpi{background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:.85rem 1rem}
+.kpi .label{color:#6b7280;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}
+.kpi .value{font-size:1.5rem;font-weight:700;margin-top:.25rem}
+table{width:100%;border-collapse:collapse;margin-bottom:2rem;font-size:.9rem}
+th,td{padding:.5rem .75rem;border-bottom:1px solid #e5e7eb;text-align:left}
+th{background:#f9fafb;font-weight:600;color:#4b5563}
+td:not(:first-child),th:not(:first-child){text-align:right}
+h2{font-size:1.05rem;margin:1.5rem 0 .5rem;color:#374151}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+.empty{text-align:center;color:#9ca3af}
+@media(max-width:600px){.two{grid-template-columns:1fr}}
