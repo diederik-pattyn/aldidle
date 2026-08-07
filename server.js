@@ -5,6 +5,8 @@ const path    = require('path');
 const { STORES } = require('./assets/stores.js');
 
 const app        = express();
+app.set('views', path.join(__dirname, 'views'));
+app.set('view engine', 'ejs');
 const PORT       = process.env.PORT || 3000;
 // CACHE_DIR lets the cache live on a persistent volume (e.g. a Railway volume)
 // so the "product of the day" survives restarts. Defaults to the app dir.
@@ -709,60 +711,21 @@ app.get('/stats', (req, res) => {
   const avgWinAttempts = s.wins ? (s.winAttemptsSum / s.wins).toFixed(2) : '—';
   const winRate        = s.finishes ? ((s.wins / s.finishes) * 100).toFixed(1) + '%' : '—';
   const days = Object.keys(s.byDay).sort().reverse().slice(0, 30);
-  const rows = days.map(d => {
+  const dayRows = days.map(d => {
     const r = s.byDay[d];
-    const avg = r.wins ? (r.winAttemptsSum / r.wins).toFixed(2) : '—';
-    const wr  = r.finishes ? ((r.wins / r.finishes) * 100).toFixed(0) + '%' : '—';
-    return `<tr><td>${d || '(unknown)'}</td><td>${r.visits}</td><td>${r.guesses}</td><td>${r.finishes}</td><td>${r.wins}</td><td>${wr}</td><td>${avg}</td></tr>`;
-  }).join('');
-  const marketRows = Object.entries(s.marketCounts).sort((a,b)=>b[1]-a[1])
-    .map(([m,n]) => `<tr><td>${m}</td><td>${n}</td></tr>`).join('');
-  const langRows = Object.entries(s.langCounts).sort((a,b)=>b[1]-a[1])
-    .map(([l,n]) => `<tr><td>${l}</td><td>${n}</td></tr>`).join('');
-  res.type('html').send(`<!doctype html>
-<html><head><meta charset="utf-8"><title>Aldidle stats</title>
-<style>
-  body{font-family:-apple-system,system-ui,sans-serif;max-width:880px;margin:2rem auto;padding:0 1rem;color:#1f2937}
-  h1{margin:0 0 .25rem;font-size:1.6rem}
-  .sub{color:#6b7280;margin-bottom:1.5rem;font-size:.9rem}
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.75rem;margin-bottom:2rem}
-  .kpi{background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:.85rem 1rem}
-  .kpi .label{color:#6b7280;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}
-  .kpi .value{font-size:1.5rem;font-weight:700;margin-top:.25rem}
-  table{width:100%;border-collapse:collapse;margin-bottom:2rem;font-size:.9rem}
-  th,td{padding:.5rem .75rem;border-bottom:1px solid #e5e7eb;text-align:left}
-  th{background:#f9fafb;font-weight:600;color:#4b5563}
-  td:not(:first-child),th:not(:first-child){text-align:right}
-  h2{font-size:1.05rem;margin:1.5rem 0 .5rem;color:#374151}
-  .two{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
-  @media(max-width:600px){.two{grid-template-columns:1fr}}
-</style></head>
-<body>
-  <h1>Aldidle stats</h1>
-  <div class="sub">Visits are deduped per browser per day. Finishes count won + lost games.</div>
-  <div class="grid">
-    <div class="kpi"><div class="label">Visits</div><div class="value">${s.visits}</div></div>
-    <div class="kpi"><div class="label">Guesses</div><div class="value">${s.guesses}</div></div>
-    <div class="kpi"><div class="label">Finishes</div><div class="value">${s.finishes}</div></div>
-    <div class="kpi"><div class="label">Win rate</div><div class="value">${winRate}</div></div>
-    <div class="kpi"><div class="label">Avg attempts (wins)</div><div class="value">${avgWinAttempts}</div></div>
-  </div>
-  <h2>Last 30 days</h2>
-  <table>
-    <thead><tr><th>Day</th><th>Visits</th><th>Guesses</th><th>Finishes</th><th>Wins</th><th>Win %</th><th>Avg att.</th></tr></thead>
-    <tbody>${rows || '<tr><td colspan="7" style="text-align:center;color:#9ca3af">No data yet</td></tr>'}</tbody>
-  </table>
-  <div class="two">
-    <div>
-      <h2>By market</h2>
-      <table><thead><tr><th>Market</th><th>Events</th></tr></thead><tbody>${marketRows || '<tr><td colspan="2" style="color:#9ca3af">—</td></tr>'}</tbody></table>
-    </div>
-    <div>
-      <h2>By language</h2>
-      <table><thead><tr><th>Lang</th><th>Events</th></tr></thead><tbody>${langRows || '<tr><td colspan="2" style="color:#9ca3af">—</td></tr>'}</tbody></table>
-    </div>
-  </div>
-</body></html>`);
+    return {
+      day: d,
+      visits: r.visits,
+      guesses: r.guesses,
+      finishes: r.finishes,
+      wins: r.wins,
+      winRate: r.finishes ? ((r.wins / r.finishes) * 100).toFixed(0) + '%' : '—',
+      avgAttempts: r.wins ? (r.winAttemptsSum / r.wins).toFixed(2) : '—',
+    };
+  });
+  const marketRows = Object.entries(s.marketCounts).sort((a, b) => b[1] - a[1]);
+  const langRows    = Object.entries(s.langCounts).sort((a, b) => b[1] - a[1]);
+  res.render('stats', { stats: s, avgWinAttempts, winRate, dayRows, marketRows, langRows });
 });
 
 app.use(express.static(__dirname));
