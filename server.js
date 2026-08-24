@@ -129,16 +129,25 @@ function resolveScrapeLang(market, requested) {
 }
 
 function buildHeaders(market, scrapeLang, accept) {
-  return {
+  const headers = {
     'User-Agent':      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     'Accept-Language': market.acceptLanguage[scrapeLang] || market.acceptLanguage[market.defaultScrapeLang],
     'Accept':          accept || 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Encoding': 'gzip, deflate, br',
     'Sec-Fetch-Dest':  'document',
     'Sec-Fetch-Mode':  'navigate',
-    'Sec-Fetch-Site':  'none',
     'Upgrade-Insecure-Requests': '1',
   };
+
+  if (market.id === 'ah-be') {
+    headers.Origin = 'https://www.ah.be';
+    headers.Referer = 'https://www.ah.be/';
+    headers['Sec-Fetch-Site'] = 'same-origin';
+  } else {
+    headers['Sec-Fetch-Site'] = 'none';
+  }
+
+  return headers;
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -149,12 +158,26 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // let it manage that. Returns { data, status } so callers can use resp.data.
 async function httpGet(url, { headers = {}, timeout = 15000 } = {}) {
   const { ['Accept-Encoding']: _drop, ...h } = headers;
-  const res = await fetch(url, { headers: h, redirect: 'follow', signal: AbortSignal.timeout(timeout) });
+  const urlHost = (() => { try { return new URL(url).hostname; } catch { return ''; } })();
+  const shouldUseAhBrowserHeaders = urlHost === 'www.ah.be' || urlHost === 'ah.be';
+
+  const requestHeaders = shouldUseAhBrowserHeaders
+    ? { ...h, Origin: 'https://www.ah.be', Referer: 'https://www.ah.be/', 'Sec-Fetch-Site': 'same-origin' }
+    : h;
+
+  let res = await fetch(url, { headers: requestHeaders, redirect: 'follow', signal: AbortSignal.timeout(timeout) });
+
+  if (res.status === 403 && shouldUseAhBrowserHeaders && !(h.Origin || h.Referer || h['Sec-Fetch-Site'] === 'same-origin')) {
+    const retryHeaders = { ...requestHeaders, Origin: 'https://www.ah.be', Referer: 'https://www.ah.be/', 'Sec-Fetch-Site': 'same-origin' };
+    res = await fetch(url, { headers: retryHeaders, redirect: 'follow', signal: AbortSignal.timeout(timeout) });
+  }
+
   if (!res.ok) {
     const e = new Error(`Request failed with status code ${res.status}`);
     e.status = res.status;
     throw e;
   }
+
   return { data: await res.text(), status: res.status };
 }
 
@@ -743,7 +766,7 @@ app.get('/:store', (req, res) => {
 });
 
 // Exported for tests / manual use.
-module.exports = { MARKETS, getMarket, fetchProductPool, scrapeProduct, resolveScrapeLang };
+module.exports = { MARKETS, getMarket, fetchProductPool, scrapeProduct, resolveScrapeLang, buildHeaders, httpGet };
 
 if (require.main === module) {
   app.listen(PORT, () => {
