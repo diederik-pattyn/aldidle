@@ -167,7 +167,12 @@ async function httpGet(url, { headers = {}, timeout = 15000 } = {}) {
 
   let res = await fetch(url, { headers: requestHeaders, redirect: 'follow', signal: AbortSignal.timeout(timeout) });
 
-  if (res.status === 403 && shouldUseAhBrowserHeaders && !(h.Origin || h.Referer || h['Sec-Fetch-Site'] === 'same-origin')) {
+  const shouldRetryAh403 = res.status === 403 && shouldUseAhBrowserHeaders && (
+    !(h.Origin || h.Referer || h['Sec-Fetch-Site'] === 'same-origin') ||
+    (h.Origin === 'https://www.ah.be' && h.Referer === 'https://www.ah.be/' && h['Sec-Fetch-Site'] === 'same-origin')
+  );
+
+  if (shouldRetryAh403) {
     const retryHeaders = { ...requestHeaders, Origin: 'https://www.ah.be', Referer: 'https://www.ah.be/', 'Sec-Fetch-Site': 'same-origin' };
     res = await fetch(url, { headers: retryHeaders, redirect: 'follow', signal: AbortSignal.timeout(timeout) });
   }
@@ -382,9 +387,24 @@ const PRODUCT_STRATEGIES = {
       for (const node of (Array.isArray(data) ? data : [data])) {
         if (!node || node['@type'] !== 'Product') continue;
         name = cleanText(node.name || name);
-        const offer = Array.isArray(node.offers) ? node.offers[0] : node.offers;
-        if (offer && offer.price != null) price = parseFloat(String(offer.price).replace(',', '.'));
-        if (node.image) imageUrl = node.image;
+
+        const candidates = [];
+        const offers = Array.isArray(node.offers) ? node.offers : [node.offers].filter(Boolean);
+        for (const offer of offers) {
+          if (!offer) continue;
+          if (offer.price != null) candidates.push(parseFloat(String(offer.price).replace(',', '.')));
+          if (offer.priceSpecification && offer.priceSpecification.price != null) {
+            candidates.push(parseFloat(String(offer.priceSpecification.price).replace(',', '.')));
+          }
+        }
+        if (node.price != null) candidates.push(parseFloat(String(node.price).replace(',', '.')));
+        if (node.priceSpecification && node.priceSpecification.price != null) {
+          candidates.push(parseFloat(String(node.priceSpecification.price).replace(',', '.')));
+        }
+        const positive = candidates.filter(v => Number.isFinite(v) && v > 0);
+        if (positive.length) price = Math.max(...positive);
+
+        if (node.image) imageUrl = Array.isArray(node.image) ? node.image[0] : node.image;
         if (node.weight && node.weight.value) desc = cleanText(node.weight.value);
       }
     });
@@ -593,7 +613,8 @@ async function getProductOfDay(dateKey, marketId, requestedLang) {
     const index = await ensureCrossLangIndex(market);
     const ids = Object.keys(index).sort();
     if (!ids.length) throw new Error(`Empty cross-lang index for ${market.id}`);
-    while (!product && tries < 5) {
+    const maxAttempts = market.id === 'ah-be' ? 20 : 5;
+    while (!product && tries < maxAttempts) {
       const idx = Math.floor(rng() * ids.length);
       const id  = ids[(idx + tries) % ids.length];
       const url = index[id][lang] || index[id][market.defaultScrapeLang];
@@ -620,7 +641,8 @@ async function getProductOfDay(dateKey, marketId, requestedLang) {
       if (!cache[poolKey].length) throw new Error(`No products found for ${market.id}/${lang}`);
       saveCache(cache);
     }
-    while (!product && tries < 5) {
+    const maxAttempts = market.id === 'ah-be' ? 20 : 5;
+    while (!product && tries < maxAttempts) {
       const idx = Math.floor(rng() * cache[poolKey].length);
       const url = cache[poolKey][(idx + tries) % cache[poolKey].length];
       tries++;
@@ -635,7 +657,7 @@ async function getProductOfDay(dateKey, marketId, requestedLang) {
     }
   }
 
-  if (!product) throw new Error('Could not fetch a valid product after 5 attempts');
+  if (!product) throw new Error(`Could not fetch a valid product after ${market.id === 'ah-be' ? 20 : 5} attempts`);
   // Reload cache: it may have been modified during scraping (sitemap fetches wrote to disk).
   const fresh = loadCache();
   fresh[cacheKey] = product;
