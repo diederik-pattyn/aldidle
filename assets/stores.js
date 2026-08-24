@@ -18,11 +18,6 @@
       markets: ['be', 'de-nord', 'de-sued'], defaultMarket: 'be',
       color: '#003087', accent: '#E2001A',
     },
-    albertheijn: {
-      slug: 'albertheijn', name: 'Albert Heijn', logo: 'AH',
-      markets: ['ah-be'], defaultMarket: 'ah-be',
-      color: '#0091d4', accent: '#ffffff',
-    },
     hubo: {
       slug: 'hubo', name: 'Hubo', logo: 'HUBO',
       markets: ['hubo-be'], defaultMarket: 'hubo-be',
