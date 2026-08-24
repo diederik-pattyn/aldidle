@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+.github
+Dockerfile
+.dockerignore
+.product-cache.json
+analytics.jsonl
+.env
+.env.*
+coverage
+.vscode
