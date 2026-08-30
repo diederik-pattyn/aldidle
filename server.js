@@ -134,8 +134,16 @@ function buildHeaders(market, scrapeLang, accept) {
     'Accept-Language': market.acceptLanguage[scrapeLang] || market.acceptLanguage[market.defaultScrapeLang],
     'Accept':          accept || 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Encoding': 'gzip, deflate, br',
-    'Sec-Fetch-Dest':  'document',
-    'Sec-Fetch-Mode':  'navigate',
+    'DNT': '1',
+    'Connection': 'keep-alive',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    'Sec-CH-UA': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    'Sec-CH-UA-Mobile': '?0',
+    'Sec-CH-UA-Platform': '"macOS"',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-User': '?1',
     'Upgrade-Insecure-Requests': '1',
   };
 
@@ -152,6 +160,25 @@ function buildHeaders(market, scrapeLang, accept) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+function applyAhBrowserHeaders(headers = {}) {
+  return {
+    ...headers,
+    Origin: 'https://www.ah.be',
+    Referer: 'https://www.ah.be/',
+    'Sec-Fetch-Site': 'same-origin',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-User': '?1',
+    'Sec-CH-UA': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    'Sec-CH-UA-Mobile': '?0',
+    'Sec-CH-UA-Platform': '"macOS"',
+    DNT: '1',
+    'Upgrade-Insecure-Requests': '1',
+    'Cache-Control': 'no-cache',
+    Pragma: 'no-cache',
+  };
+}
+
 // Minimal axios-compatible GET backed by Node's native fetch (undici). undici's
 // TLS fingerprint gets past Cloudflare on some stores (e.g. Hubo) where axios is
 // blocked with a 403. It also auto-decompresses, so we drop Accept-Encoding and
@@ -161,29 +188,52 @@ async function httpGet(url, { headers = {}, timeout = 15000 } = {}) {
   const urlHost = (() => { try { return new URL(url).hostname; } catch { return ''; } })();
   const shouldUseAhBrowserHeaders = urlHost === 'www.ah.be' || urlHost === 'ah.be';
 
-  const requestHeaders = shouldUseAhBrowserHeaders
-    ? { ...h, Origin: 'https://www.ah.be', Referer: 'https://www.ah.be/', 'Sec-Fetch-Site': 'same-origin' }
-    : h;
+  const requestHeaders = shouldUseAhBrowserHeaders ? applyAhBrowserHeaders(h) : h;
+
+  const logAh = (phase, res, bodyText = '') => {
+    if (!shouldUseAhBrowserHeaders) return;
+    const sample = String(bodyText || '').slice(0, 240).replace(/\s+/g, ' ');
+    console.log(`[AH-HTTP] ${phase} url=${url} status=${res && res.status} final=${res && res.url} headers=${JSON.stringify(requestHeaders)}`);
+    if (sample) console.log(`[AH-HTTP] ${phase} bodySample=${sample}`);
+  };
 
   let res = await fetch(url, { headers: requestHeaders, redirect: 'follow', signal: AbortSignal.timeout(timeout) });
+  logAh('initial', res);
 
-  const shouldRetryAh403 = res.status === 403 && shouldUseAhBrowserHeaders && (
-    !(h.Origin || h.Referer || h['Sec-Fetch-Site'] === 'same-origin') ||
-    (h.Origin === 'https://www.ah.be' && h.Referer === 'https://www.ah.be/' && h['Sec-Fetch-Site'] === 'same-origin')
-  );
-
+  const shouldRetryAh403 = res.status === 403 && shouldUseAhBrowserHeaders;
   if (shouldRetryAh403) {
-    const retryHeaders = { ...requestHeaders, Origin: 'https://www.ah.be', Referer: 'https://www.ah.be/', 'Sec-Fetch-Site': 'same-origin' };
+    const retryHeaders = applyAhBrowserHeaders({ ...h, Accept: h.Accept || 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' });
+    console.log(`[AH-HTTP] retrying-403 url=${url} headers=${JSON.stringify(retryHeaders)}`);
     res = await fetch(url, { headers: retryHeaders, redirect: 'follow', signal: AbortSignal.timeout(timeout) });
+    logAh('after-403-retry', res);
+  }
+
+  let body = await res.text();
+  if (!res.ok && /cloudflare|challenge|verify you are human|security check/i.test(body)) {
+    const retryHeaders = applyAhBrowserHeaders({
+      ...h,
+      Accept: h.Accept || 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Dest': 'document',
+    });
+    console.log(`[AH-HTTP] retrying-cloudflare url=${url} headers=${JSON.stringify(retryHeaders)}`);
+    const retry = await fetch(url, { headers: retryHeaders, redirect: 'follow', signal: AbortSignal.timeout(timeout) });
+    body = await retry.text();
+    logAh('after-cloudflare-retry', retry, body);
+    if (retry.ok) return { data: body, status: retry.status };
+    const e = new Error(`Request failed with status code ${retry.status}`);
+    e.status = retry.status;
+    throw e;
   }
 
   if (!res.ok) {
     const e = new Error(`Request failed with status code ${res.status}`);
     e.status = res.status;
+    console.log(`[AH-HTTP] failing url=${url} status=${res.status} body=${String(body).slice(0, 300).replace(/\s+/g, ' ')}`);
     throw e;
   }
 
-  return { data: await res.text(), status: res.status };
+  return { data: body, status: res.status };
 }
 
 // ── Seed helpers ─────────────────────────────────────────────────────────────
@@ -308,12 +358,56 @@ async function fetchProductPool(market, scrapeLang) {
 // ── Product strategies ──────────────────────────────────────────────────────
 function cleanText(s) { return (s || '').replace(/\s+/g, ' ').trim(); }
 
+function combineDescriptionAndQuantity(base, qty) {
+  const desc = cleanText(base || '');
+  const amount = cleanText(qty || '');
+  if (!desc && !amount) return '';
+  if (!desc) return amount;
+  if (!amount) return desc;
+  if (desc.toLowerCase().includes(amount.toLowerCase())) return desc;
+  return `${desc} • ${amount}`;
+}
+
+function extractQuantityText(html, $, name = '') {
+  const sources = [
+    cleanText($('title').text() || ''),
+    cleanText($('meta[name="description"]').attr('content') || ''),
+    cleanText($('meta[property="og:description"]').attr('content') || ''),
+    cleanText(name || ''),
+    cleanText($('body').text() || ''),
+    cleanText(html || ''),
+  ].filter(Boolean);
+
+  const patterns = [
+    /(\d+\s*(?:x|×)\s*\d+[.,]?\d*\s*(?:g|kg|ml|l|cl|ltr|liter|st\.?|stk|stuks|pack|pak|blik|flaschen|beutel|rollen|blister|doos))/gi,
+    /(\d+[.,]?\d*\s*(?:g|kg|ml|l|cl|ltr|liter|st\.?|stk|stuks|pack|pak|blik|flaschen|beutel|rollen|blister|doos))/gi,
+    /(\d+\s*(?:st\.?|stk|stuks|pack|pak|blik|flaschen|beutel|rollen|blister|doos))/gi,
+  ];
+
+  const seen = new Set();
+  for (const source of sources) {
+    for (const pattern of patterns) {
+      const matches = source.match(pattern) || [];
+      for (const raw of matches) {
+        const text = cleanText(raw).replace(/\s+/g, ' ');
+        if (!text || seen.has(text.toLowerCase())) continue;
+        if (/^(?:ontdek|alle|informationen|product|artikel|bekijk|assortiment|verkoop|beschikbaarheid|mehr|shop|info)/i.test(text)) continue;
+        seen.add(text.toLowerCase());
+        return text;
+      }
+    }
+  }
+  return '';
+}
+
 const PRODUCT_STRATEGIES = {
   // Belgian Aldi: products show a visible €-value in HTML, name in h1/h2
   be(html, $, url, market) {
-    const name = cleanText(
+    const h1Name = cleanText(
       $('h1, h2').filter((_, el) => $(el).text().trim().length > 3).first().text()
     );
+    const pageName = cleanText($('title').text() || '');
+    const name = h1Name || pageName || 'Product';
     let price = 0;
     $('span, strong, b, div, p').each((_, el) => {
       if (price) return false;
@@ -329,10 +423,17 @@ const PRODUCT_STRATEGIES = {
       const src = $('img[src*="/content/aldi/"]').first().attr('src') || '';
       imageUrl  = src ? (src.startsWith('http') ? src : market.baseUrl + src) : '';
     }
-    const desc = cleanText($('span, p, li').filter((_, el) => {
+    let desc = cleanText($('span, p, li').filter((_, el) => {
       const t = $(el).text().trim();
       return t.length > 4 && t.length < 120 && /\d+\s*(g|kg|ml|l|cl|st\.?|stuks|pak|blik)/i.test(t);
     }).first().text());
+    const genericText = /ontdek onze producten bij aldi|alle informationen zum produkt|productinformatie/i.test(desc || '') ||
+      /ontdek onze producten bij aldi|alle informationen zum produkt|productinformatie/i.test($('meta[name="description"]').attr('content') || '');
+    const qty = !desc || genericText ? extractQuantityText(html, $, name) : '';
+    if (qty) {
+      const base = genericText || !desc ? name : desc;
+      desc = combineDescriptionAndQuantity(base, qty);
+    }
     return { name, price, imageUrl, description: desc };
   },
 
@@ -352,6 +453,14 @@ const PRODUCT_STRATEGIES = {
     if (!desc) {
       const dm = html.match(/shortDescription\\?"\s*:\s*\\?"([^"\\]{1,200})/);
       if (dm) desc = dm[1];
+    }
+    const genericText = /alle informationen zum produkt|produktinformationen|productinformatie/i.test(desc || '');
+    const qty = !desc || genericText || !/\d/.test(desc)
+      ? extractQuantityText(html, $, name)
+      : '';
+    if (qty) {
+      const base = genericText || !desc ? name : desc;
+      desc = combineDescriptionAndQuantity(base, qty);
     }
     return { name, price, imageUrl, description: desc };
   },
@@ -373,6 +482,13 @@ const PRODUCT_STRATEGIES = {
         .replace(/\s*➔\s*Jetzt bei ALDI S(?:ÜD|UED) kaufen!?\s*$/i, '')
         .replace(/\s*zum günstigen ALDI Preis\s*\.?\s*$/i, '')
         .trim();
+    }
+    const qty = !desc || !/\d/.test(desc)
+      ? extractQuantityText(html, $, name)
+      : '';
+    if (qty) {
+      const base = !desc || !/\d/.test(desc) ? name : desc;
+      desc = combineDescriptionAndQuantity(base, qty);
     }
     return { name, price, imageUrl, description: desc };
   },

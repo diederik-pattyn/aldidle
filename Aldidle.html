@@ -15,9 +15,11 @@
 
 <header>
   <div class="header-top">
-    <div class="aldi-logo">
-      <span class="logo-aldi">ALDI</span>
-      <span class="logo-sub">België</span>
+    <div class="header-left">
+      <div class="aldi-logo">
+        <span class="logo-aldi">ALDI</span>
+        <span class="logo-sub">België</span>
+      </div>
     </div>
     <div class="header-right">
       <h1>RAAD DE <span>PRIJS</span></h1>
@@ -34,15 +36,17 @@
   <div class="header-stripe"></div>
 </header>
 
+<div class="nav-under-header">
+  <button class="home-btn" type="button" onclick="location.href='/'" aria-label="Terug naar de winkels">←</button>
+</div>
+
 <div id="app">
   <div id="loading-screen" class="card">
     <div class="spinner"></div>
     <div class="loading-label">Dagelijks product ophalen…</div>
-    <p id="loading-msg">Aldi-rekken scannen…</p>
+    <p id="loading-msg">Winkels scannen…</p>
   </div>
 </div>
-
-<footer>Winkle is een fan-project</footer>
 
 <script src="/assets/stores.js"></script>
 <script>
@@ -142,7 +146,7 @@ const translations = {
   nl: {
     'raad-de-prijs': 'RAAD DE PRIJS',
     'product-van-dag': 'Product van de dag ophalen…',
-    'aldi-rekken': 'Aldi-rekken scannen…',
+    'winkels-scannen': 'Winkels scannen…',
     'product-pagina': 'Productpagina ophalen…',
     'afbeelding-laden': 'Afbeelding laden…',
     'prijskaartje': 'Prijskaartje controleren…',
@@ -185,7 +189,7 @@ const translations = {
   fr: {
     'raad-de-prijs': 'DEVINEZ LE PRIX',
     'product-van-dag': 'Récupération du produit du jour…',
-    'aldi-rekken': 'Scan des rayons Aldi…',
+    'winkels-scannen': 'Scan des rayons…',
     'product-pagina': 'Chargement de la page produit…',
     'afbeelding-laden': 'Chargement de l\'image…',
     'prijskaartje': 'Vérification de l\'étiquette…',
@@ -228,7 +232,7 @@ const translations = {
   de: {
     'raad-de-prijs': 'PREIS ERRATEN',
     'product-van-dag': 'Tagesprodukt laden…',
-    'aldi-rekken': 'Aldi-Regale scannen…',
+    'winkels-scannen': 'Regale scannen…',
     'product-pagina': 'Produktseite laden…',
     'afbeelding-laden': 'Bild wird geladen…',
     'prijskaartje': 'Preisschild überprüfen…',
@@ -278,6 +282,17 @@ function getMarketSubtitle() {
   const m = MARKETS[currentMarket];
   if (m.variant) return m.variant;
   return t(`country-${m.country}`);
+}
+function getLoadingMessages() {
+  const base = [
+    t('winkels-scannen'),
+    t('product-pagina'),
+    t('server-opwarmt'),
+    t('afbeelding-laden'),
+    t('prijskaartje'),
+    t('bijna-klaar'),
+  ];
+  return [...new Set(base)];
 }
 function getMarketLabel(id) {
   const m = MARKETS[id];
@@ -337,15 +352,24 @@ function updateHeaderAndFooter() {
   // so it must run before any t()-based text rendering below.
   populateLangSelect();
   applyTheme();
-  document.querySelector('.logo-aldi').textContent = MARKETS[currentMarket].logo || 'ALDI';
-  document.querySelector('.logo-sub').textContent = getMarketSubtitle();
+
+  const logo = document.querySelector('.logo-aldi');
+  if (logo) logo.textContent = MARKETS[currentMarket].logo || 'ALDI';
+
+  const sub = document.querySelector('.logo-sub');
+  if (sub) sub.textContent = getMarketSubtitle();
+
   const full = t('raad-de-prijs');
   const lastSpace = full.lastIndexOf(' ');
   const main      = lastSpace >= 0 ? full.slice(0, lastSpace) : full;
   const highlight  = lastSpace >= 0 ? full.slice(lastSpace + 1) : '';
-  document.querySelector('.header-right h1').innerHTML =
-    highlight ? `${main} <span>${highlight}</span>` : `<span>${main}</span>`;
-  document.querySelector('footer').innerHTML = t('footer').replace('{store}', currentStore.name);
+
+  const heading = document.querySelector('.header-right h1');
+  if (heading) heading.innerHTML = highlight ? `${main} <span>${highlight}</span>` : `<span>${main}</span>`;
+
+  const footer = document.querySelector('footer');
+  if (footer) footer.innerHTML = t('footer').replace('{store}', currentStore.name);
+
   document.title = `Winkle · ${currentStore.name}`;
   populateMarketSelect();
 }
@@ -899,14 +923,16 @@ async function startGame() {
   // Fresh game
   product = null; guesses = []; gameOver = false;
 
+  const loadingMessages = getLoadingMessages();
+  const loadingLabel = loadingMessages[0];
   document.getElementById('app').innerHTML = `
     <div id="loading-screen" class="card card-center">
       <div class="spinner"></div>
       <div class="loading-label">${t('product-van-dag')}</div>
-      <p id="loading-msg">${t('aldi-rekken')}</p>
+      <p id="loading-msg">${loadingLabel}</p>
     </div>`;
 
-  const msgs = [t('aldi-rekken'), t('product-pagina'), t('server-opwarmt'), t('afbeelding-laden'), t('prijskaartje'), t('bijna-klaar')];
+  const msgs = loadingMessages;
   let mi = 0;
   const ticker = setInterval(() => {
     mi = (mi+1) % msgs.length;
