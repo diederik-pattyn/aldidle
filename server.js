@@ -829,6 +829,17 @@ function aggregateStats(events) {
 app.use((_, res, next) => { res.header('Access-Control-Allow-Origin', '*'); next(); });
 app.use(express.json({ limit: '2kb' }));
 
+// Renders `view` into views/layout.ejs so every page shares one head/body shell
+// (see views/layout.ejs + views/partials/head.ejs) — pages only supply their
+// own body content plus title/themeColor/stylesheet.
+function renderPage(res, view, locals) {
+  const pageLocals = { lang: 'nl', themeColor: null, ...locals };
+  app.render(view, pageLocals, (err, body) => {
+    if (err) { console.error(`Render error (${view}):`, err.message); return res.status(500).send('Render error'); }
+    res.render('layout', { ...pageLocals, body });
+  });
+}
+
 app.get('/api/markets', (_, res) => {
   res.json(Object.keys(MARKETS).map(id => ({
     id,
@@ -886,19 +897,26 @@ app.get('/stats', (req, res) => {
   });
   const marketRows = Object.entries(s.marketCounts).sort((a, b) => b[1] - a[1]);
   const langRows    = Object.entries(s.langCounts).sort((a, b) => b[1] - a[1]);
-  res.render('stats', { stats: s, avgWinAttempts, winRate, dayRows, marketRows, langRows });
+  renderPage(res, 'stats', {
+    title: 'Aldidle stats', stylesheet: '/assets/stats.css',
+    stats: s, avgWinAttempts, winRate, dayRows, marketRows, langRows,
+  });
 });
 
 app.use(express.static(__dirname));
 
 // Landing page: pick a store.
-app.get('/', (_, res) => res.sendFile(path.join(__dirname, 'landing.html')));
+app.get('/', (_, res) => renderPage(res, 'landing', {
+  title: 'Winkle – Raad de prijs!', themeColor: '#E8891A', stylesheet: '/assets/landing.css',
+}));
 
 // Per-store game page (/aldi, /albertheijn, …). The game reads its store from
 // the URL path. Unknown slugs bounce back to the landing page.
 app.get('/:store', (req, res) => {
   if (Object.prototype.hasOwnProperty.call(STORES, req.params.store)) {
-    return res.sendFile(path.join(__dirname, 'Aldidle.html'));
+    return renderPage(res, 'game', {
+      title: 'Winkle – Raad de prijs!', themeColor: '#003087', stylesheet: '/assets/aldidle.css',
+    });
   }
   res.redirect('/');
 });

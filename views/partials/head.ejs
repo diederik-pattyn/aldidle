@@ -1,0 +1,13 @@
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title><%= title %></title>
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<% if (typeof themeColor !== 'undefined' && themeColor) { %>
+<meta name="theme-color" content="<%= themeColor %>">
+<% } %>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=DM+Sans:wght@400;600;700;900&display=swap" rel="stylesheet">
+<% if (typeof stylesheet !== 'undefined' && stylesheet) { %>
+<link rel="stylesheet" href="<%= stylesheet %>">
+<% } %>
